@@ -61,6 +61,20 @@ one at a time.
 4. PE structure (peinfo — imports, suspicious sections, entropy anomalies, overlay) — binary
 5. Packer/compiler detection (die — is it packed? what with?) — binary
 6. Capability mapping (capa — ATT&CK techniques, prioritize by severity) — PE/.NET/ELF
+6b. Config/C2 extraction (config.json — configextractor-py with CAPE + rat-king
+   parser packs). For a RECOGNIZED family it statically rips the embedded config
+   (C2 hosts/ports, encryption keys, campaign/botnet IDs, mutex, install paths) —
+   values that are often encrypted and so invisible to strings/floss. `status:
+   extracted` = a family parser produced a config; `no_match` = framework ran,
+   nothing matched (a real "no embedded config"); `unavailable` = parser packs not
+   installed (a GAP — rebuild the venv); `error`/per-match `exception` = a parser
+   matched but failed (record it). This is NOT a reputation lookup — extracted
+   values come out of THIS sample and may be brand-new (no DB has them yet), so
+   feed them back into the IP/domain-rep + VT-pivot stages. Config richness varies
+   per sample (sometimes full config, sometimes just family + one C2). Recovers
+   EMBEDDED indicators only — promote extracted C2/keys to High *intent*, not
+   "confirmed live" (only a sandbox confirms behaviour). Also re-run on the
+   --unpack recovered body (unpacked/config.json). Source tag `[config]` — binary
 7. Deep RE when `--deep` ran (ghidra — decompiled decrypt/loader/C2 routines;
    on packed input it sees only the loader stub, so keep payload claims at
    Investigate until unpacked) — binary

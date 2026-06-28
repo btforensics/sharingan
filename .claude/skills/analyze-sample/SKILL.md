@@ -286,7 +286,9 @@ Source tags — be precise, because the distinction carries analytic weight:
 dynamically-resolved API names** via `GetProcAddress` — NOT an import) · `[r2]` (radare2 control
 flow) · `[ghidra]` (Ghidra decompiled pseudocode, `--deep` only) · `[unpack]` (emulation-recovered
 payload: strings/capa/yara from `unpacked/`, `--unpack` only — embedded indicators, not confirmed
-live) · `[capa]` · `[VT]` (AV-engine
+live) · `[config]` (configextractor-py: embedded family config — C2/keys/campaign/mutex ripped
+from a recognized family; embedded indicators, High intent not confirmed-live; feed back into
+domain/IP-rep + VT-pivot) · `[capa]` · `[VT]` (AV-engine
 consensus) · `[VT-YARA]` (crowdsourced YARA on VT) · `[VT-domain]` (VirusTotal domain report) ·
 `[VT-pivot]` (VirusTotal pivoting: contacted/dropped relationships + imphash/communicating-file
 siblings) · `[ThreatFox]` / `[URLhaus]` (abuse.ch domain/C2 reputation) · `[AbuseIPDB]` (IP reputation) ·

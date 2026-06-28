@@ -74,7 +74,8 @@ git -C /tmp/capa-src sparse-checkout set sigs && cp -r /tmp/capa-src/sigs rules/
 # 3. Fetch the pestats helper
 git clone https://github.com/as0ni/pestats.git tools/pestats
 
-# 4. Build the per-analyst Python venv (oletools / LnkParse3 / extract_msg / Speakeasy)
+# 4. Build the per-analyst Python venv
+#    (oletools / LnkParse3 / extract_msg / Speakeasy / configextractor-py + parser packs)
 bash tools/setup-env.sh
 
 # 5. (Optional) Install Ghidra for the --deep decompilation stage

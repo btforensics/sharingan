@@ -70,14 +70,14 @@
     <div class="sub">Prioritized capability gaps · scored by build value · 2026-06-26 · last verified against the toolchain 2026-06-28 · analyst: Buddy Tancio</div>
     <div class="scorewrap">
       <div>
-        <div class="bigscore">84.5<small>/100</small></div>
+        <div class="bigscore">87.5<small>/100</small></div>
         <div class="sub">current tool score (full malware analysis)</div>
       </div>
       <div class="traj">
         <div style="font-size:13px;opacity:.9">Trajectory</div>
-        <div class="bar"><i style="width:84.5%"></i></div>
+        <div class="bar"><i style="width:87.5%"></i></div>
         <div class="marks">
-          <span>58 start</span><span>78.5 provenance ✓</span><span>81.5 multi-format ✓</span><span>84.5 emu-unpack ✓</span><span>~88 sandbox</span>
+          <span>58 start</span><span>81.5 multi-format ✓</span><span>84.5 emu-unpack ✓</span><span>87.5 config-extract ✓</span><span>~91 sandbox</span>
         </div>
       </div>
     </div>
@@ -86,7 +86,7 @@
   <div class="note">
     <b>How the per-item score works.</b> Each item gets a <b>Build Priority Score (0–100)</b> = a blend of
     <i>analysis impact</i>, <i>cost-efficiency</i> (cheaper scores higher), and whether it <i>unblocks</i> other
-    work. The <span class="chip delta">+Δ</span> chip is the estimated lift to the overall <b>84.5/100</b> tool score
+    work. The <span class="chip delta">+Δ</span> chip is the estimated lift to the overall <b>87.5/100</b> tool score
     once built. Impact stars (★) rate analytical value independent of cost. Scores are an analyst's judgment call,
     not a measurement — they're meant to drive sequencing, not to be precise.
   </div>
@@ -273,8 +273,9 @@
     Enumerated this session while the sandbox (#1) is parked. <b>Every item here is
     sandbox-free</b> — it runs on the existing Linux toolchain — and each attacks a
     specific blind spot the current 13-stage pipeline leaves open. Scored on the same
-    Build Priority basis as the items above. The headline score stays 78.5 until one
-    ships; the <span class="chip delta">+Δ</span> is the estimated lift when it does.
+    Build Priority basis as the items above. N3, N4 and now N2 have shipped (headline
+    87.5); the <span class="chip delta">+Δ</span> on a remaining item is the estimated
+    lift when it ships.
     <br><br><b>Honest caveat:</b> these scores are <i>expected</i> value — improvement is
     <b>conditional on your samples</b>, not guaranteed. N1 was tested on
     <code>av45i.exe</code> and downgraded 88&rarr;68 when VT turned out to hold no dynamic
@@ -312,26 +313,41 @@
       <div class="scorebox s-mid"><div class="ring"><div class="num">68</div><div class="lbl">Build Score</div></div></div>
     </div>
 
-    <!-- N2 -->
-    <div class="card">
-      <div class="rank"><span class="n">N2</span>candidate</div>
+    <!-- N2 — SHIPPED -->
+    <div class="card done">
+      <div class="rank"><span class="n">N2</span>shipped</div>
       <div class="body">
-        <h3>Automated config / C2 extraction</h3>
-        <p>Wire in <code>configextractor-py</code> + the community extractor set. For a
-           recognized family it statically rips the embedded <b>config block</b> — C2
-           hosts, ports, encryption keys, campaign/botnet IDs, mutex templates — straight
-           out of the binary.</p>
-        <p class="why">Turns "there is a C2 in here somewhere" into ground-truth IOCs you
-           can action immediately. Directly attacks the gap this session exposed: the real
-           C2/key material lives inside the packed payload, not in the loader's strings.</p>
+        <h3>Automated config / C2 extraction <span class="ribbon">✓ SHIPPED 2026-06-28</span></h3>
+        <p><b>Done.</b> New <code>tools/config_extract.py</code> stage wired into
+           <code>triage.sh</code> (binary branch + the <code>--unpack</code> recovered body) →
+           <code>config.json</code>. Runs <b>configextractor-py</b> with the <b>CAPE</b> +
+           <b>rat-king</b> parser packs (<b>61 family parsers</b> load) and statically rips the
+           embedded config — C2 hosts/ports, encryption keys, campaign/botnet IDs, mutex,
+           install paths — out of a recognized family. It carries per-family <i>parsers</i>
+           (a YARA recognizer + decrypt/parse logic), <b>not</b> an IOC database, so the values
+           come out of <i>this</i> sample and may be brand new. Status is honest:
+           <code>extracted</code> / <code>no_match</code> / <code>unavailable</code> (gap) /
+           <code>error</code>. Deps live in the per-analyst venv (<code>setup-env.sh</code>);
+           version stamped into <code>provenance.json</code>. Source tag <code>[config]</code>.</p>
+        <p class="why" style="background:#fff6f5;border-left:3px solid var(--hot);padding:8px 10px;border-radius:6px">
+           <b>⚠ Verified end-to-end on a live AsyncRAT sample.</b> Pulled the family's C2
+           domain — and that string is <b>not present in the binary's plaintext strings</b>
+           (it lives in the AES-encrypted .NET settings), so only the config extractor surfaced
+           it: exactly the strings/floss blind spot this item targets.
+           Honest caveats baked in: config richness <i>varies per sample</i> (a second AsyncRAT
+           yielded family only); recovers EMBEDDED indicators only → High <i>intent</i>, not
+           confirmed-live; feed extracted C2/keys back into the IP/domain-rep + VT-pivot stages.
+           One dep gotcha found &amp; fixed: rat-king needs <code>validators&gt;=0.22</code>
+           (Kali's system 0.20.0 throws), and the venv's <code>unicorn</code> is re-pinned to
+           1.0.2 so Speakeasy (N4) keeps working.</p>
         <div class="meta">
           <span class="chip">Impact <span class="stars">★★★★</span></span>
-          <span class="chip">Cost: Low-Med</span>
-          <span class="chip">Strong on known families</span>
-          <span class="chip delta">+3 Δ</span>
+          <span class="chip free">Cost: Low-Med (done)</span>
+          <span class="chip delta">+3 Δ applied (84.5→87.5)</span>
+          <span class="chip">Strong on modern families; null on old/bespoke (e.g. av45i)</span>
         </div>
       </div>
-      <div class="scorebox s-hi"><div class="ring"><div class="num">82</div><div class="lbl">Build Score</div></div></div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
     </div>
 
     <!-- N3 — SHIPPED -->
@@ -452,17 +468,25 @@
         dump-and-rescan stage. floss/capa/YARA now see the real body on self-contained packers
         (UPX-class) without a VM; samples whose stub stalls (e.g. av45i) are flagged as a gap that
         earns a sandbox. This delivers the static arm of the old <b>#4</b>.</li>
-    <li><b>Then the big one (#1 → ~88):</b> stand up an isolated sandbox. This is the only item that converts
+    <li><b>Config / C2 extraction (N2) — ✓ done 2026-06-28</b> (84.5→87.5): configextractor-py
+        + 61 family parsers rip the embedded config (C2/keys/campaign/mutex) out of recognized
+        families — indicators that are encrypted and invisible to strings/floss. Verified pulling
+        a live AsyncRAT C2 that wasn't in the binary's plaintext. Runs on the original sample and
+        on N4's recovered body, and the new IOCs feed back into the reputation + VT-pivot stages.</li>
+    <li><b>Then the big one (#1 → ~91):</b> stand up an isolated sandbox. This is the only item that converts
         High-confidence hypotheses into confirmed behavior — there is no static-only substitute, and it is
         exactly where N4's recorded gaps hand off.</li>
-    <li><b>Ops polish anytime (#6, #7, N5/N6):</b> IOC export, sample diffing, detection-content
-        generation, and Authenticode verification slot in whenever convenient.</li>
+    <li><b>Ops polish anytime (#5, #6, #7, N6):</b> detection-content generation (YARA+Sigma),
+        IOC export, sample diffing, and Authenticode verification slot in whenever convenient.</li>
   </ol>
 
   <div class="note">
-    <b>Honest ceiling.</b> Items 2–3, 5–8 are mostly polish and enrichment — they push you to ~75 but don't change
-    what the tool can <i>see</i>. Breaking 70 → 85 fundamentally requires <b>dynamic analysis</b>, because this
-    malware family's payload only exists after runtime decryption.
+    <b>Honest ceiling.</b> The sandbox-free build-out (N2/N3/N4 + the enrichment items) has taken the tool
+    from 58 to <b>87.5</b> — further than the original note assumed static work could reach. But every gain
+    so far is still about what the tool can <i>see statically</i>: extracted/embedded indicators at High
+    <i>intent</i>. The last step — turning High-confidence behavioral hypotheses into <b>confirmed</b>
+    behavior (live C2, dropped files, runtime-only payloads like av45i's) — has no static substitute and
+    requires <b>dynamic analysis (#1)</b>. That's the ~91+ tier, and where N4/N2's recorded gaps hand off.
   </div>
 
   <footer>

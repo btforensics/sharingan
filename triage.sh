@@ -154,6 +154,13 @@ case "$CATEGORY" in
     capa --rules "$CAPA_RULES" -s "$CAPA_SIGS" --json "$SAMPLE" > "$REPORT_DIR/capa.json" 2>"$REPORT_DIR/capa.err"
     [ -s "$REPORT_DIR/capa.err" ] && echo "    (capa warnings logged to capa.err)" || rm -f "$REPORT_DIR/capa.err"
 
+    # ── Automated config / C2 extraction (N2) — recognized-family parsers ──
+    # Statically rips the embedded config (C2/keys/campaign IDs/mutex) from
+    # ~200 known families via configextractor-py. no_match is a real result;
+    # "unavailable" means the venv lacks the parser packs (run setup-env.sh).
+    echo "[bin] config/C2 extraction (configextractor-py)..."
+    "$PY" "$CONFIGEXT" "$SAMPLE" "$REPORT_DIR/config.json"
+
     # ── Ghidra headless (deep RE) — binary samples only ──
     if [ "$DEEP" -eq 1 ]; then
         echo "[+] Deep RE: running Ghidra headless decompilation (this is slow)..."
@@ -205,7 +212,9 @@ case "$CATEGORY" in
                 echo "    [unpack] YARA on recovered body..."
                 yara -r "$YARA_RULES_DIR/yara-rules/index.yar" "$DUMP" > "$UDIR/yara.txt" 2>/dev/null || true
                 yara -r "$YARA_RULES_DIR/signature-base/index.yml" "$DUMP" >> "$UDIR/yara.txt" 2>/dev/null || true
-                echo "    [unpack] re-analysis written to unpacked/ (floss/capa/yara/strings)"
+                echo "    [unpack] config/C2 extraction on recovered body..."
+                "$PY" "$CONFIGEXT" "$DUMP" "$UDIR/config.json"
+                echo "    [unpack] re-analysis written to unpacked/ (floss/capa/yara/strings/config)"
             else
                 echo "    No payload recovered — emulation gap recorded in unpacked.json"
                 echo "    (stub likely bailed early / anti-emulation / remote-keyed — escalate to a sandbox)"

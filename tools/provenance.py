@@ -124,18 +124,18 @@ def dir_mtime_provenance(path):
         return {"error": f"{type(e).__name__}: {e}"}
 
 
-def speakeasy_version():
-    """Version of the emulation-unpacking dep (roadmap N4). It lives in the
-    per-analyst venv, so probe that interpreter's package metadata rather than
-    the system python running this stage. Returns {version} or {error}."""
+def venv_pkg_version(package):
+    """Version of a dep that lives in the per-analyst venv (roadmap N2/N4 stages).
+    Probes the venv interpreter's package metadata rather than the system python
+    running this stage. Returns {version, package} or {error}."""
     venv_py = os.path.join(BASE, "tools", "venv", "bin", "python")
     py = venv_py if os.path.exists(venv_py) else sys.executable
     try:
         ver = _run([py, "-c",
                     "from importlib.metadata import version;"
-                    "print(version('speakeasy-emulator'))"], timeout=15)
+                    f"print(version('{package}'))"], timeout=15)
         if ver and ver[0].isdigit():
-            return {"version": ver, "package": "speakeasy-emulator"}
+            return {"version": ver, "package": package}
         return {"error": "not installed (run tools/setup-env.sh)"}
     except Exception as e:
         return {"error": f"{type(e).__name__}: {e}"}
@@ -175,7 +175,8 @@ def main():
             "yara": tool_version("yara", ["yara", "--version"],
                                  r"([0-9][\w.\-]*)"),
             "ghidra": ghidra_version(GHIDRA_HOME),
-            "speakeasy": speakeasy_version(),
+            "speakeasy": venv_pkg_version("speakeasy-emulator"),
+            "configextractor": venv_pkg_version("configextractor-py"),
             "python": {"version": platform.python_version(),
                        "raw": sys.version.split()[0]},
         },
