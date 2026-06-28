@@ -1,0 +1,30 @@
+# ─────────────────────────────────────────────────────────────────────────
+#  SAFETY-CRITICAL — never commit these
+# ─────────────────────────────────────────────────────────────────────────
+# Live API keys (copy config.env.example -> config.env and fill locally)
+config.env
+
+# Live malware samples — pushing these violates GitHub's TOS and is dangerous
+samples/
+
+# Generated triage output (contains live IOCs; regenerable via triage.sh)
+reports/
+
+# ─────────────────────────────────────────────────────────────────────────
+#  Third-party tooling — installed locally via the setup scripts, not vendored
+# ─────────────────────────────────────────────────────────────────────────
+# Detect-It-Easy engine clone (~550 MB, has its own git history)
+tools/DIE-engine/
+# pestats clone (third-party, has its own git history)
+tools/pestats/
+# Rule sets — capa-rules / capa-sigs / yara-rules / signature-base clones
+rules/
+# Per-analyst Python venv (oletools/LnkParse3/Speakeasy/...) — built by setup-env.sh
+tools/venv/
+
+# ─────────────────────────────────────────────────────────────────────────
+#  Python / editor / local Claude Code cruft
+# ─────────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.claude/settings.local.json

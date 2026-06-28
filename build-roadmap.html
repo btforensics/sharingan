@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sharingan — Build Roadmap</title>
+<style>
+  :root{
+    --navy:#0b3d6b; --navy2:#11507f; --line:#c9d6e3; --bg:#f4f7fb;
+    --ink:#1a1a1a; --muted:#5a6b7c; --good:#1d7a46; --warn:#b8860b; --hot:#b3361f;
+    --chip:#eef3f8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI","DejaVu Sans",Arial,sans-serif;color:var(--ink);
+       background:var(--bg);line-height:1.5;font-size:15px}
+  .wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px}
+  header.top{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;
+       border-radius:14px;padding:26px 28px;box-shadow:0 6px 22px rgba(11,61,107,.25)}
+  header.top h1{margin:0 0 4px;font-size:25px;letter-spacing:.2px}
+  header.top .sub{opacity:.9;font-size:14px}
+  .scorewrap{display:flex;flex-wrap:wrap;gap:22px;align-items:center;margin-top:18px}
+  .bigscore{font-size:54px;font-weight:700;line-height:1}
+  .bigscore small{font-size:20px;opacity:.7;font-weight:500}
+  .traj{flex:1;min-width:260px}
+  .bar{height:12px;border-radius:7px;background:rgba(255,255,255,.22);overflow:hidden;margin:8px 0}
+  .bar > i{display:block;height:100%;width:70%;background:linear-gradient(90deg,#7fc8ff,#bfe6ff)}
+  .traj .marks{display:flex;justify-content:space-between;font-size:12px;opacity:.85}
+  .note{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);
+       border-radius:10px;padding:14px 18px;margin:22px 0;font-size:14px;color:var(--muted)}
+  .note b{color:var(--navy)}
+  h2{color:var(--navy);border-bottom:2px solid var(--line);padding-bottom:6px;margin:34px 0 14px;font-size:19px}
+  .grid{display:grid;gap:16px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px;
+       box-shadow:0 2px 8px rgba(11,61,107,.06);display:grid;
+       grid-template-columns:64px 1fr auto;gap:16px;align-items:start}
+  .rank{font-size:13px;color:var(--muted);font-weight:600;text-align:center;padding-top:4px}
+  .rank .n{display:block;font-size:26px;color:var(--navy);font-weight:700}
+  .body h3{margin:0 0 6px;font-size:17px;color:var(--ink)}
+  .body p{margin:6px 0;font-size:14px}
+  .body .why{color:var(--muted);font-size:13.5px}
+  .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{background:var(--chip);border:1px solid var(--line);border-radius:20px;
+       padding:2px 11px;font-size:12px;color:var(--navy2);white-space:nowrap}
+  .chip.delta{background:#e7f4ec;border-color:#bfe0cc;color:var(--good);font-weight:600}
+  .chip.free{background:#e7f4ec;border-color:#bfe0cc;color:var(--good)}
+  .scorebox{text-align:center;min-width:96px}
+  .scorebox .num{font-size:34px;font-weight:700;line-height:1}
+  .scorebox .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .scorebox .ring{display:inline-block;padding:8px 0}
+  .s-hi .num{color:var(--good)} .s-mid .num{color:var(--warn)} .s-lo .num{color:var(--muted)}
+  .stars{letter-spacing:2px;font-size:13px}
+  .card.done{background:#f3fbf6;border-color:#bfe0cc}
+  .ribbon{display:inline-block;background:var(--good);color:#fff;font-size:11px;font-weight:700;
+       letter-spacing:.5px;border-radius:5px;padding:2px 9px;margin-left:8px;vertical-align:middle}
+  .seq{background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px 22px}
+  .seq li{margin:12px 0;font-size:14.5px}
+  .seq b{color:var(--navy)}
+  footer{margin-top:34px;color:var(--muted);font-size:12.5px;text-align:center}
+  table.method{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  table.method td{border:1px solid var(--line);padding:6px 10px}
+  table.method td:first-child{font-weight:600;color:var(--navy);white-space:nowrap}
+  @media(max-width:620px){.card{grid-template-columns:1fr}.rank{text-align:left}.scorebox{text-align:left}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>Sharingan — Build Roadmap</h1>
+    <div class="sub">Prioritized capability gaps · scored by build value · 2026-06-26 · last verified against the toolchain 2026-06-28 · analyst: Buddy Tancio</div>
+    <div class="scorewrap">
+      <div>
+        <div class="bigscore">84.5<small>/100</small></div>
+        <div class="sub">current tool score (full malware analysis)</div>
+      </div>
+      <div class="traj">
+        <div style="font-size:13px;opacity:.9">Trajectory</div>
+        <div class="bar"><i style="width:84.5%"></i></div>
+        <div class="marks">
+          <span>58 start</span><span>78.5 provenance ✓</span><span>81.5 multi-format ✓</span><span>84.5 emu-unpack ✓</span><span>~88 sandbox</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="note">
+    <b>How the per-item score works.</b> Each item gets a <b>Build Priority Score (0–100)</b> = a blend of
+    <i>analysis impact</i>, <i>cost-efficiency</i> (cheaper scores higher), and whether it <i>unblocks</i> other
+    work. The <span class="chip delta">+Δ</span> chip is the estimated lift to the overall <b>84.5/100</b> tool score
+    once built. Impact stars (★) rate analytical value independent of cost. Scores are an analyst's judgment call,
+    not a measurement — they're meant to drive sequencing, not to be precise.
+  </div>
+
+  <h2>Things to build (ranked by Build Priority Score)</h2>
+  <div class="grid">
+
+    <!-- 1 -->
+    <div class="card">
+      <div class="rank"><span class="n">1</span>priority</div>
+      <div class="body">
+        <h3>Dynamic analysis / sandbox</h3>
+        <p>Detonate samples in an isolated VM with procmon + Wireshark + FakeNet/INetSim (or a Cuckoo/CAPE stack).
+           The single biggest lever: it converts <i>every</i> behavioral hypothesis — listener port, mutex name,
+           C2 URIs, dropped files — from "High confidence" into <b>confirmed</b>.</p>
+        <p class="why">Why it caps the score: this family's real payload is runtime-decrypted, so no static-only path
+           can reach it. This is the only item that breaks 70 → 85.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★★★</span></span>
+          <span class="chip">Cost: High</span>
+          <span class="chip">Unblocks: behavior confirmation, unpacking</span>
+          <span class="chip delta">+15 Δ</span>
+        </div>
+      </div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">95</div><div class="lbl">Build Score</div></div></div>
+    </div>
+
+    <!-- 2 — SHIPPED -->
+    <div class="card done">
+      <div class="rank"><span class="n">2</span>shipped</div>
+      <div class="body">
+        <h3>Ghidra (decompiler) <span class="ribbon">✓ SHIPPED 2026-06-26</span></h3>
+        <p><b>Done.</b> Ghidra 12.1.2 installed to <code>/opt/ghidra</code> (pinned to JDK 21), wired as
+           the opt-in <code>./triage.sh &lt;sample&gt; --deep</code> stage via a Java export script
+           (<code>ExportGhidra.java</code>) → <code>ghidra.json</code>. The skill reads it; source tag
+           <code>[ghidra]</code>.</p>
+        <p class="why">Proven end-to-end on <code>av45i.exe</code>: confirmed the Protected-Storage
+           credential routine (<code>PStoreCreateInstance</code>), a multi-threaded worker, a random
+           listener port (1000–30000), and a process-watchdog respawn thread. (Note: Ghidra 12 dropped
+           Jython — the export had to be a Java GhidraScript, not Python.)</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★★</span></span>
+          <span class="chip free">Cost: Free</span>
+          <span class="chip delta">+4 Δ applied (70→74)</span>
+          <span class="chip">Still: sees loader stub only on packed input → pair with #4</span>
+        </div>
+      </div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
+    </div>
+
+    <!-- 3 — SHIPPED -->
+    <div class="card done">
+      <div class="rank"><span class="n">3</span>shipped</div>
+      <div class="body">
+        <h3>Domain / C2 reputation lookups <span class="ribbon">✓ SHIPPED 2026-06-27</span></h3>
+        <p><b>Done.</b> New <code>tools/domain_rep.py</code> stage wired into <code>triage.sh</code> →
+           <code>domain_rep.json</code>. Extracts hosts from <code>floss.json</code> (URL-derived first,
+           bare matches noise-filtered) and checks each against <b>ThreatFox</b> + <b>URLhaus</b>
+           (abuse.ch unified Auth-Key) and the <b>VirusTotal domains API</b> (verdict + passive-DNS
+           resolutions). Closes AbuseIPDB's domain blind spot — no new accounts needed.</p>
+        <p class="why">Proven on <code>av45i.exe</code>: cleanly extracted the two <code>bublik*</code>
+           C2 domains (zero string-noise) and VT-domain flagged them malicious (8/0). The
+           <code>/analyze-sample</code> skill reads it; source tags <code>[ThreatFox]</code>
+           <code>[URLhaus]</code> <code>[VT-domain]</code>.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★</span></span>
+          <span class="chip free">Cost: Low</span>
+          <span class="chip delta">+2 Δ applied (74→76)</span>
+        </div>
+      </div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
+    </div>
+
+    <!-- 4 -->
+    <div class="card">
+      <div class="rank"><span class="n">4</span>priority</div>
+      <div class="body">
+        <h3>Automated unpacking stage</h3>
+        <p>UPX is installed but never invoked, and there's no path for the real problem — the encrypted overlays.
+           capa/floss only ever see the loader stub. Add a scripted debugger-dump (or detonate-and-dump) stage,
+           then re-run floss/capa on the <i>actual worm body</i>.</p>
+        <p class="why">Depends on item 2 (Ghidra) and ideally item 1 (sandbox). High value once those exist.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★★</span></span>
+          <span class="chip">Cost: Med</span>
+          <span class="chip">Depends on #1/#2</span>
+          <span class="chip delta">+4 Δ</span>
+        </div>
+      </div>
+      <div class="scorebox s-mid"><div class="ring"><div class="num">78</div><div class="lbl">Build Score</div></div></div>
+    </div>
+
+    <!-- 5 — SHIPPED -->
+    <div class="card done">
+      <div class="rank"><span class="n">5</span>shipped</div>
+      <div class="body">
+        <h3>VirusTotal pivoting <span class="ribbon">✓ SHIPPED 2026-06-28</span></h3>
+        <p><b>Done.</b> New <code>tools/vt_pivot.py</code> stage wired into <code>triage.sh</code> →
+           <code>vt_pivot.json</code>. Pivots on the VT report already fetched in step 2:
+           <b>forward</b> footprint (contacted domains/IPs, dropped files, ITW URLs) and
+           <b>reverse</b> pivots to sibling samples via <code>communicating_files</code> per
+           indicator and an <code>imphash</code> intelligence search. Emits a flattened
+           <code>siblings</code> list (sha256 + AV verdict + threat label + which pivot found it).
+           Stdlib-only, paced for the VT public-tier rate limit, degrades gracefully when a pivot
+           is gated (captured 403, not a crash).</p>
+        <p class="why">Proven on <code>av45i.exe</code>: the imphash pivot expanded the single
+           sample into <b>5 sibling samples</b>, all labeled <code>trojan.tedy/socks</code> —
+           exactly the WORM_SOCKS family expansion this item was meant to deliver. The
+           <code>/analyze-sample</code> skill reads it; source tag <code>[VT-pivot]</code>.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★</span></span>
+          <span class="chip free">Cost: Low</span>
+          <span class="chip delta">+2 Δ applied (76→78)</span>
+          <span class="chip">Uses existing VT key</span>
+        </div>
+      </div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
+    </div>
+
+    <!-- 6 -->
+    <div class="card">
+      <div class="rank"><span class="n">6</span>priority</div>
+      <div class="body">
+        <h3>Machine-readable IOC export (MISP / STIX / CSV)</h3>
+        <p>IOCs live only in markdown tables. Emit a STIX bundle / MISP event / flat CSV per report for ingestion
+           into Trend telemetry and hunting.</p>
+        <p class="why">Turns reports into operational feeds; low effort, mostly a serializer over the IOC table.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★</span></span>
+          <span class="chip">Cost: Low</span>
+          <span class="chip">Ops integration</span>
+          <span class="chip delta">+1 Δ</span>
+        </div>
+      </div>
+      <div class="scorebox s-mid"><div class="ring"><div class="num">62</div><div class="lbl">Build Score</div></div></div>
+    </div>
+
+    <!-- 7 -->
+    <div class="card">
+      <div class="rank"><span class="n">7</span>priority</div>
+      <div class="body">
+        <h3>Automated sample diffing</h3>
+        <p>You proved Ransomware.exe ≡ av45i.exe by hand (byte-identical capa). Add an import/string/capa diff
+           (and bindiff-style where possible) to make family pairing routine.</p>
+        <p class="why">Nice multiplier once you have several samples; not urgent with two.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★</span></span>
+          <span class="chip">Cost: Low</span>
+          <span class="chip">Cross-report tool</span>
+          <span class="chip delta">+1 Δ</span>
+        </div>
+      </div>
+      <div class="scorebox s-lo"><div class="ring"><div class="num">56</div><div class="lbl">Build Score</div></div></div>
+    </div>
+
+    <!-- 8 — SHIPPED -->
+    <div class="card done">
+      <div class="rank"><span class="n">8</span>shipped</div>
+      <div class="body">
+        <h3>Tool / rule-set provenance in reports <span class="ribbon">✓ SHIPPED 2026-06-28</span></h3>
+        <p><b>Done.</b> New <code>tools/provenance.py</code> stage wired into <code>triage.sh</code> →
+           <code>provenance.json</code>. Captures each tool's version (capa, floss, DIE, YARA, Ghidra,
+           Python) and each rule-set's git <code>commit</code>+<code>date</code> (capa-rules, yara-rules,
+           signature-base) or newest-file mtime (capa-sigs), bound to the sample SHA-256 with a UTC
+           stamp. Stdlib-only, self-locating paths, never raises into the pipeline (a missing tool is
+           captured as an <code>error</code>, not a crash).</p>
+        <p class="why">Proven on <code>av45i.exe</code>: capa 9.4.0 / floss 3.1.1 / die 3.21 / yara 4.5.6
+           / ghidra 12.1.2, capa-rules @ <code>aed45e25</code> (2026-06-19), signature-base @
+           <code>43b2b2f</code> (2026-06-17). The <code>/analyze-sample</code> skill renders it as a
+           "Tooling &amp; Rule Provenance" footer — reports are now reproducible / audit-grade.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★</span></span>
+          <span class="chip free">Cost: Low</span>
+          <span class="chip delta">+0.5 Δ applied (78→78.5)</span>
+        </div>
+      </div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
+    </div>
+
+  </div>
+
+  <h2>New candidates — 2026-06-28 capability review</h2>
+  <div class="note">
+    Enumerated this session while the sandbox (#1) is parked. <b>Every item here is
+    sandbox-free</b> — it runs on the existing Linux toolchain — and each attacks a
+    specific blind spot the current 13-stage pipeline leaves open. Scored on the same
+    Build Priority basis as the items above. The headline score stays 78.5 until one
+    ships; the <span class="chip delta">+Δ</span> is the estimated lift when it does.
+    <br><br><b>Honest caveat:</b> these scores are <i>expected</i> value — improvement is
+    <b>conditional on your samples</b>, not guaranteed. N1 was tested on
+    <code>av45i.exe</code> and downgraded 88&rarr;68 when VT turned out to hold no dynamic
+    report (see its card). Several others (N2 config-extract, N6 authenticode) likewise
+    pay off on <i>modern</i> malware but add little to this old, niche family. <b>N4
+    (emulation unpacking) is the one most likely to yield new value on the samples actually
+    in hand</b> — verify each before building, don't assume.
+  </div>
+  <div class="grid">
+
+    <!-- N1 -->
+    <div class="card">
+      <div class="rank"><span class="n">N1</span>candidate</div>
+      <div class="body">
+        <h3>VirusTotal behavior ingestion — a free "sandbox" <i>when VT has one</i></h3>
+        <p>Pull VT's <i>existing</i> detonation report via the <code>/behaviours</code>
+           API: processes spawned, files &amp; registry written, network contacted,
+           mutexes, services created — <b>but only when a dynamic sandbox actually ran the
+           sample.</b> We send only the hash; nothing is uploaded.</p>
+        <p class="why" style="background:#fff6f5;border-left:3px solid var(--hot);padding:8px 10px;border-radius:6px">
+           <b>⚠ Verified 2026-06-28 on <code>av45i.exe</code> — and it came back near-empty.</b>
+           VT's only "behaviour" report for this sample is <code>sandbox_name: CAPA</code>
+           (static), <code>has_network:false</code>, <code>has_procs:false</code>. No dynamic
+           data exists — almost certainly because the worm targets <b>pre-2007 Windows</b>
+           and won't run in VT's modern sandboxes. So here it would only re-fetch capa output
+           Sharingan already produces. <b>Real value is conditional</b>: high for modern /
+           widely-detonated malware, ~null for old / niche / targeted samples.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★</span> (conditional)</span>
+          <span class="chip free">Cost: Low</span>
+          <span class="chip">Uses existing VT key</span>
+          <span class="chip delta">+2 Δ (modern samples only)</span>
+        </div>
+      </div>
+      <div class="scorebox s-mid"><div class="ring"><div class="num">68</div><div class="lbl">Build Score</div></div></div>
+    </div>
+
+    <!-- N2 -->
+    <div class="card">
+      <div class="rank"><span class="n">N2</span>candidate</div>
+      <div class="body">
+        <h3>Automated config / C2 extraction</h3>
+        <p>Wire in <code>configextractor-py</code> + the community extractor set. For a
+           recognized family it statically rips the embedded <b>config block</b> — C2
+           hosts, ports, encryption keys, campaign/botnet IDs, mutex templates — straight
+           out of the binary.</p>
+        <p class="why">Turns "there is a C2 in here somewhere" into ground-truth IOCs you
+           can action immediately. Directly attacks the gap this session exposed: the real
+           C2/key material lives inside the packed payload, not in the loader's strings.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★★</span></span>
+          <span class="chip">Cost: Low-Med</span>
+          <span class="chip">Strong on known families</span>
+          <span class="chip delta">+3 Δ</span>
+        </div>
+      </div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">82</div><div class="lbl">Build Score</div></div></div>
+    </div>
+
+    <!-- N3 — SHIPPED -->
+    <div class="card done">
+      <div class="rank"><span class="n">N3</span>shipped</div>
+      <div class="body">
+        <h3>Non-PE triage — maldocs, scripts, LNK, PDFs, archives <span class="ribbon">✓ SHIPPED 2026-06-28</span></h3>
+        <p><b>Done.</b> Sharingan is now <b>file-type agnostic</b>. New
+           <code>tools/identify.py</code> classifies any input (PE/.NET/ELF/Office/PDF/LNK/
+           script/archive/email/unknown) → <code>fileinfo.json</code> and flags
+           <b>extension↔content masquerade</b>. <code>triage.sh</code> was restructured into
+           <b>universal stages</b> (hash · VT · MalwareBazaar · strings · YARA · IP/domain rep ·
+           vt-pivot · provenance) + <b>routed stages</b>: PE pipeline for binaries,
+           <code>tools/nonpe.py</code> for the rest — olevba/oleid (Office), pdfid/pdf-parser
+           (PDF), LnkParse3 (LNK), recursive archive extraction+identify, eml/msg email parse.
+           Non-PE deps live in a per-analyst venv (<code>tools/setup-env.sh</code>).</p>
+        <p class="why">Proven on PE (av45i still routes correctly, 13,081 strings, bublik C2
+           domains extracted), PDF, archive (PE+script children identified), email (URLs pulled),
+           and a PE-as-<code>.pdf</code> masquerade (caught). Also fixed a latent bug: IP
+           extraction read the nested FLOSS dict and silently found nothing — now reads a
+           unified <code>strings.json</code>.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★★</span></span>
+          <span class="chip free">Cost: Med (done)</span>
+          <span class="chip delta">+3 Δ applied (78.5→81.5)</span>
+          <span class="chip">Biggest coverage expansion to date</span>
+        </div>
+      </div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
+    </div>
+
+    <!-- N4 — SHIPPED -->
+    <div class="card done">
+      <div class="rank"><span class="n">N4</span>shipped</div>
+      <div class="body">
+        <h3>Emulation-based unpacking (Speakeasy) <span class="ribbon">✓ SHIPPED 2026-06-28</span></h3>
+        <p><b>Done.</b> New <code>tools/unpack_emulate.py</code> stage, opt-in via
+           <code>./triage.sh &lt;sample&gt; --unpack</code> (PE only). Emulates <i>only the loader
+           stub</i> in <b>Mandiant Speakeasy</b> (Windows-API emulation — no VM, no detonation, no
+           network), lets the stub self-decrypt in emulated memory, then carves the decrypted
+           regions and re-runs floss/capa/YARA on the <b>real body</b> into an <code>unpacked/</code>
+           subdir. Bounded by an instruction cap + wall-clock (anti-hang); Speakeasy installed in
+           the venv via <code>setup-env.sh</code>; version stamped into <code>provenance.json</code>.
+           Emits <code>unpacked.json</code> (<code>status</code>/<code>recovered</code>/
+           <code>primary_region</code>/<code>gap</code>). Source tag <code>[unpack]</code>.</p>
+        <p class="why" style="background:#fff6f5;border-left:3px solid var(--hot);padding:8px 10px;border-radius:6px">
+           <b>⚠ Verified honestly — and it corrected an earlier overclaim.</b> Proven end-to-end on
+           a UPX-packed PE: the stub ran <b>852,607 emulated instructions</b> and decompressed the
+           payload back into memory (a marker string absent from the packed file reappeared; 605 new
+           strings recovered). But <code>av45i.exe</code>'s ~2005 crypter <b>bails after 171
+           instructions</b> under Speakeasy (unsupported API / anti-emulation) — so N4 did <i>not</i>
+           crack av45i; it records that as a <code>gap</code> and points to the sandbox. The earlier
+           "viable for av45i" note was optimistic — the stage now <i>proves</i> per-sample which case
+           you're in instead of assuming. Recovers EMBEDDED indicators only (not confirmed live behaviour).</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★★</span></span>
+          <span class="chip free">Cost: Med (done)</span>
+          <span class="chip delta">+3 Δ applied (81.5→84.5)</span>
+          <span class="chip">Sandbox-free arm of #4 · honest gap when the stub stalls</span>
+        </div>
+      </div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
+    </div>
+
+    <!-- N5 -->
+    <div class="card">
+      <div class="rank"><span class="n">N5</span>candidate</div>
+      <div class="body">
+        <h3>Detection-content generation (YARA + Sigma)</h3>
+        <p>From the recovered strings/imports/behavior, auto-draft a candidate <b>YARA</b>
+           rule (yarGen-style) and a <b>Sigma</b> rule for the observed host/network IOCs —
+           saved alongside the report for analyst review and hunting.</p>
+        <p class="why">Closes the analysis&rarr;protection loop: every triage becomes
+           reusable detection content for telemetry and threat hunting. High operational
+           value for a defensive team; the rules are drafts an analyst tightens, not blind
+           auto-deploys.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★</span></span>
+          <span class="chip">Cost: Low-Med</span>
+          <span class="chip">Turns triage into hunting content</span>
+          <span class="chip delta">+2 Δ</span>
+        </div>
+      </div>
+      <div class="scorebox s-mid"><div class="ring"><div class="num">70</div><div class="lbl">Build Score</div></div></div>
+    </div>
+
+    <!-- N6 -->
+    <div class="card">
+      <div class="rank"><span class="n">N6</span>candidate</div>
+      <div class="body">
+        <h3>Authenticode / digital-signature verification</h3>
+        <p>Beyond noting a signature exists (peinfo does that), actually <b>verify</b> it:
+           validate the cert chain, check validity/revocation, and surface the signer.
+           Flag invalid/expired/self-signed and known <b>stolen or abused</b> certificates.</p>
+        <p class="why">Signing status is a strong, cheap signal: signed-and-valid lowers
+           suspicion, while a stolen/abused or broken signature is itself a finding. We
+           already parse the signature blob — this adds the verdict the analyst actually needs.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★</span></span>
+          <span class="chip free">Cost: Low</span>
+          <span class="chip">Reuses parsed signature data</span>
+          <span class="chip delta">+1 Δ</span>
+        </div>
+      </div>
+      <div class="scorebox s-mid"><div class="ring"><div class="num">64</div><div class="lbl">Build Score</div></div></div>
+    </div>
+
+  </div>
+
+  <h2>Recommended build sequence</h2>
+  <ol class="seq">
+    <li><b>Ghidra (#2) — ✓ done 2026-06-26</b> (70→74), <b>domain/C2 reputation (#3) — ✓ done
+        2026-06-27</b> (74→76), <b>VT pivoting (#5) — ✓ done 2026-06-28</b> (76→78),
+        <b>provenance stamping (#8) — ✓ done 2026-06-28</b> (78→78.5),
+        <b>multi-format triage (N3) — ✓ done 2026-06-28</b> (78.5→81.5). The cheap free wins are
+        now all banked.</li>
+    <li><b>Emulation unpacking (N4) — ✓ done 2026-06-28</b> (81.5→84.5): the sandbox-free
+        dump-and-rescan stage. floss/capa/YARA now see the real body on self-contained packers
+        (UPX-class) without a VM; samples whose stub stalls (e.g. av45i) are flagged as a gap that
+        earns a sandbox. This delivers the static arm of the old <b>#4</b>.</li>
+    <li><b>Then the big one (#1 → ~88):</b> stand up an isolated sandbox. This is the only item that converts
+        High-confidence hypotheses into confirmed behavior — there is no static-only substitute, and it is
+        exactly where N4's recorded gaps hand off.</li>
+    <li><b>Ops polish anytime (#6, #7, N5/N6):</b> IOC export, sample diffing, detection-content
+        generation, and Authenticode verification slot in whenever convenient.</li>
+  </ol>
+
+  <div class="note">
+    <b>Honest ceiling.</b> Items 2–3, 5–8 are mostly polish and enrichment — they push you to ~75 but don't change
+    what the tool can <i>see</i>. Breaking 70 → 85 fundamentally requires <b>dynamic analysis</b>, because this
+    malware family's payload only exists after runtime decryption.
+  </div>
+
+  <footer>
+    Sharingan · build roadmap · generated 2026-06-26 · last verified against the toolchain 2026-06-28 (no new stage since N4 emu-unpack) · scores are analyst judgment for sequencing, not measurements.
+  </footer>
+
+</div>
+</body>
+</html>

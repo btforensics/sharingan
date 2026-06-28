@@ -1,0 +1,49 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "python3 tools/statusline.py",
+    "padding": 0
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(./triage.sh:*)",
+      "Bash(python3:*)",
+      "Bash(tools/venv/bin/python:*)",
+      "Bash(tools/venv/bin/pip:*)",
+      "Bash(tools/venv/bin/olevba:*)",
+      "Bash(tools/venv/bin/oleid:*)",
+      "Bash(bash -n:*)",
+      "Bash(bash tools/setup-env.sh:*)",
+      "Bash(chmod +x:*)",
+      "Bash(capa:*)",
+      "Bash(floss:*)",
+      "Bash(yara:*)",
+      "Bash(diec:*)",
+      "Bash(upx:*)",
+      "Bash(7z:*)",
+      "Bash(binwalk:*)",
+      "Bash(rabin2:*)",
+      "Bash(r2:*)",
+      "Bash(strings:*)",
+      "Bash(file:*)",
+      "Bash(sha256sum:*)",
+      "Bash(sha1sum:*)",
+      "Bash(md5sum:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(echo:*)",
+      "Bash(which:*)",
+      "Bash(command -v:*)",
+      "Read(reports/**)",
+      "Read(samples/**)",
+      "Read(rules/**)",
+      "Read(tools/**)"
+    ]
+  }
+}

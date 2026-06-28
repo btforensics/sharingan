@@ -1,0 +1,889 @@
+<title>Sharingan — Malware Triage Workflow</title>
+<style>
+  :root {
+    --ground: #eef1f4;
+    --paper: #ffffff;
+    --ink: #141b22;
+    --muted: #5b6776;
+    --faint: #8a95a3;
+    --line: #d8dee6;
+    --line-soft: #e7ebf0;
+    --navy: #1d3144;
+    --accent: #0f6d78;      /* petrol — brand/structure only */
+    --accent-deep: #0a525b;
+    --accent-wash: #e3eff0;
+    --term-bg: #0e141a;
+    --term-fg: #d6dee7;
+    --term-dim: #7c8b9a;
+    --term-prompt: #5fb6c2;
+    --term-str: #c9a66b;
+    /* threat semantics — kept distinct from --accent */
+    --sev-crit: #b3392b;
+    --sev-high: #cf6a1a;
+    --sev-med: #b8901a;
+    --sev-info: #3a7ca5;
+    --sev-ok: #2f7d4f;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+  .prose { max-width: 70ch; }
+
+  /* ---- typographic system ---- */
+  h1, h2, h3 { line-height: 1.15; text-wrap: balance; letter-spacing: -0.02em; }
+  h2 { font-size: 1.65rem; font-weight: 750; margin: 0 0 .35em; color: var(--navy); }
+  h3 { font-size: 1.12rem; font-weight: 700; margin: 1.6em 0 .4em; color: var(--ink); }
+  p { margin: 0 0 1em; }
+  a { color: var(--accent-deep); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  a:hover { color: var(--accent); }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .2em;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 .9em;
+  }
+  code, kbd { font-family: var(--mono); font-size: .86em; }
+  p code, li code, td code {
+    background: #e9edf1;
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    padding: .08em .38em;
+    color: #173a40;
+    white-space: nowrap;
+  }
+
+  /* ---- header ---- */
+  header.masthead {
+    background:
+      radial-gradient(120% 140% at 88% -10%, rgba(15,109,120,.10), transparent 55%),
+      linear-gradient(180deg, #fbfcfd, var(--ground));
+    border-bottom: 1px solid var(--line);
+  }
+  .masthead-inner { padding: 60px 24px 46px; max-width: 1060px; margin: 0 auto; }
+  h1 {
+    font-size: clamp(2.1rem, 5.2vw, 3.3rem);
+    font-weight: 820;
+    margin: 0 0 .35em;
+    color: var(--navy);
+  }
+  h1 .em { color: var(--accent); }
+  .lead { font-size: 1.18rem; color: var(--muted); max-width: 60ch; margin: 0 0 1.6em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-family: var(--mono);
+    font-size: .73rem;
+    letter-spacing: .04em;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 12px;
+    color: var(--navy);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .chip b { color: var(--accent); font-weight: 600; }
+
+  /* ---- section rhythm ---- */
+  section { padding: 52px 0; border-bottom: 1px solid var(--line-soft); }
+  section:last-of-type { border-bottom: 0; }
+  .sec-head { margin-bottom: 1.5em; }
+
+  /* ---- TL;DR hero command ---- */
+  .hero-cmd {
+    background: var(--term-bg);
+    border-radius: 12px;
+    padding: 26px 26px 24px;
+    box-shadow: 0 18px 40px -24px rgba(13,40,50,.6);
+  }
+  .term-bar { display: flex; gap: 7px; margin-bottom: 16px; }
+  .term-bar i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .term-bar i:nth-child(1){ background:#e25c4b; } .term-bar i:nth-child(2){ background:#e0a23a; } .term-bar i:nth-child(3){ background:#5aa86a; }
+  .term {
+    font-family: var(--mono);
+    font-size: .92rem;
+    line-height: 1.85;
+    color: var(--term-fg);
+    overflow-x: auto;
+  }
+  .term .pr { color: var(--term-prompt); user-select: none; }
+  .term .cm { color: var(--term-dim); }
+  .term .st { color: var(--term-str); }
+  .term .ok { color: #74c08a; }
+  .term-cap { font-size: .85rem; color: var(--muted); margin-top: 14px; }
+
+  /* ---- flow diagram ---- */
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; }
+  .flow-step {
+    flex: 1 1 150px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 16px 14px;
+    position: relative;
+  }
+  .flow-step .n { font-family: var(--mono); font-size: .7rem; color: var(--accent); letter-spacing: .12em; }
+  .flow-step h4 { margin: .35em 0 .25em; font-size: .98rem; color: var(--navy); }
+  .flow-step p { margin: 0; font-size: .84rem; color: var(--muted); line-height: 1.5; }
+  .flow-step code { white-space: nowrap; font-size: .78rem; color: var(--accent-deep); }
+  .flow-arrow { align-self: center; color: var(--faint); font-size: 1.3rem; flex: 0 0 auto; }
+
+  /* ---- stage list ---- */
+  .stages { display: flex; flex-direction: column; gap: 14px; }
+  .stage {
+    display: grid;
+    grid-template-columns: 54px 1fr;
+    gap: 18px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 22px;
+  }
+  .stage-idx {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: .82rem;
+    color: var(--accent);
+    border: 1px solid var(--accent-wash);
+    background: var(--accent-wash);
+    border-radius: 8px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .stage-body h3 { margin: 0 0 .15em; font-size: 1.06rem; }
+  .stage-body .tool {
+    font-family: var(--mono); font-size: .75rem; letter-spacing: .04em;
+    color: var(--muted); text-transform: uppercase; margin-bottom: .7em;
+  }
+  .stage-body p { margin: 0 0 .8em; font-size: .94rem; color: #3c4753; }
+  .cmd {
+    background: var(--term-bg);
+    color: var(--term-fg);
+    font-family: var(--mono);
+    font-size: .82rem;
+    padding: 11px 14px;
+    border-radius: 7px;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 0 0 .6em;
+  }
+  .cmd .pr { color: var(--term-prompt); }
+  .cmd .fl { color: var(--term-str); }
+  .out {
+    font-family: var(--mono); font-size: .78rem; color: var(--muted);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .out b { color: var(--accent-deep); font-weight: 600; }
+
+  /* ---- tables ---- */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; background: var(--paper); }
+  th, td { text-align: left; padding: 11px 15px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  thead th {
+    font-family: var(--mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); font-weight: 600; background: #f4f6f8;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td code { font-size: .82em; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---- callouts ---- */
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-wash);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin: 1.4em 0;
+    font-size: .92rem;
+  }
+  .note.warn { border-left-color: var(--sev-crit); background: #faecea; }
+  .note.warn strong { color: var(--sev-crit); }
+  .note strong { color: var(--accent-deep); }
+  .note p:last-child { margin: 0; }
+
+  /* ---- option cards ---- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px;
+  }
+  .card .tag {
+    font-family: var(--mono); font-size: .7rem; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--accent); font-weight: 600;
+  }
+  .card .tag.best { color: var(--sev-ok); }
+  .card h3 { margin: .5em 0 .35em; font-size: 1rem; }
+  .card p { margin: 0 0 .7em; font-size: .88rem; color: var(--muted); }
+  .card .cmd { font-size: .76rem; margin: 0; }
+
+  /* ---- severity legend pills ---- */
+  .pill {
+    font-family: var(--mono); font-size: .72rem; font-weight: 600;
+    padding: 3px 10px; border-radius: 999px; display: inline-block; color: #fff;
+  }
+  .p-crit{ background: var(--sev-crit);} .p-high{ background: var(--sev-high);} .p-med{ background: var(--sev-med);} .p-info{ background: var(--sev-info);} .p-ok{ background: var(--sev-ok);}
+
+  /* ---- checklist ---- */
+  ul.clean { list-style: none; padding: 0; margin: 0; }
+  ul.clean li { padding: 8px 0 8px 28px; position: relative; border-bottom: 1px solid var(--line-soft); font-size: .94rem; }
+  ul.clean li:last-child { border-bottom: 0; }
+  ul.clean li::before {
+    content: ""; position: absolute; left: 4px; top: 15px;
+    width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  }
+  ol.steps { padding-left: 1.2em; }
+  ol.steps li { margin-bottom: .5em; }
+
+  /* ---- toc ---- */
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  nav.toc a {
+    font-family: var(--mono); font-size: .78rem; text-decoration: none;
+    padding: 6px 13px; border: 1px solid var(--line); border-radius: 7px;
+    background: var(--paper); color: var(--navy);
+  }
+  nav.toc a:hover { border-color: var(--accent); color: var(--accent-deep); }
+
+  footer { padding: 40px 0 60px; color: var(--muted); font-size: .85rem; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: baseline; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+  @media (max-width: 560px) {
+    .stage { grid-template-columns: 1fr; gap: 10px; }
+    .stage-idx { width: 40px; }
+    .flow-arrow { transform: rotate(90deg); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  html { scroll-behavior: smooth; }
+</style>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <p class="kicker">Sharingan · Malware-triage · Kali Linux · Claude Code</p>
+    <h1>The <span class="em">Sharingan</span> Triage Workflow</h1>
+    <p class="lead">A static-analysis pipeline that fingerprints a Windows sample with eight
+      tools, then hands the artifacts to an analyst agent that reasons across all of them and
+      writes the report — start to finish in one command.</p>
+    <div class="chips">
+      <span class="chip"><b>1</b> command, end to end</span>
+      <span class="chip"><b>13</b>-stage pipeline + auto-escalated deep stages</span>
+      <span class="chip"><b>static</b> only — never executed</span>
+      <span class="chip">output: <b>analysis_report.html</b></span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head prose">
+      <p class="kicker">Start here</p>
+      <h2>The one command</h2>
+      <p>From the project root in Claude Code, point the skill at a sample. It collects the
+        artifacts (runs <code>triage.sh</code> for you) and then analyzes them:</p>
+    </div>
+    <div class="hero-cmd">
+      <div class="term-bar"><i></i><i></i><i></i></div>
+      <div class="term"><span class="pr">&gt;</span> /analyze-sample <span class="st">samples/Ransomware.exe</span>
+<span class="cm"># 1. runs the full triage pipeline → reports/Ransomware.exe_20260626_092953/</span>
+<span class="cm"># 2. reads every artifact size-aware (mines the big ones), reasons across them</span>
+<span class="cm"># 3. auto-escalates --unpack / --deep (one at a time) when the evidence warrants</span>
+<span class="cm"># 4. writes analysis_report.md, then auto-generates analysis_report.html (the deliverable)</span>
+<span class="ok">✓ analysis_report.html saved to the report directory (.md source kept alongside)</span></div>
+      <p class="term-cap">Call <code style="color:var(--term-str)">/analyze-sample</code> with
+        <b>no argument</b> and it lists the files in <code>samples/</code> and asks which one to
+        analyze — it never auto-picks.</p>
+    </div>
+
+    <nav class="toc" aria-label="Contents">
+      <a href="#flow">How it fits together</a>
+      <a href="#setup">Setup</a>
+      <a href="#resources">Resources &amp; limits</a>
+      <a href="#pipeline">The stages</a>
+      <a href="#run">Ways to run it</a>
+      <a href="#output">Reading the output</a>
+      <a href="#deeper">Going deeper</a>
+      <a href="#safety">Safety</a>
+      <a href="#cheat">Cheat sheet</a>
+    </nav>
+  </div>
+</section>
+
+<section id="flow">
+  <div class="wrap">
+    <div class="sec-head prose">
+      <p class="kicker">Mental model</p>
+      <h2>How it fits together</h2>
+      <p>Two responsibilities, cleanly split: a Bash script <em>collects</em> evidence with
+        established tools, and an analyst agent <em>interprets</em> it. The skill chains them.</p>
+    </div>
+    <div class="flow">
+      <div class="flow-step">
+        <span class="n">INPUT</span>
+        <h4>The sample</h4>
+        <p>A Windows PE in <code>samples/</code>. Handled as data — never run.</p>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">→</div>
+      <div class="flow-step">
+        <span class="n">COLLECT</span>
+        <h4>triage.sh</h4>
+        <p>Eight tools + reputation lookups dump structured artifacts.</p>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">→</div>
+      <div class="flow-step">
+        <span class="n">ARTIFACTS</span>
+        <h4>reports/&lt;name&gt;_&lt;ts&gt;/</h4>
+        <p>Machine-readable files: JSON artifacts + a YARA text log.</p>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">→</div>
+      <div class="flow-step">
+        <span class="n">REASON</span>
+        <h4>/analyze-sample</h4>
+        <p>Cross-correlates every source, forms hypotheses, auto-escalates when packed.</p>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">→</div>
+      <div class="flow-step">
+        <span class="n">OUTPUT</span>
+        <h4>analysis_report.html</h4>
+        <p>Summary, threat call, IOCs, ATT&amp;CK, next steps. Auto-built from the <code>.md</code> source.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="setup">
+  <div class="wrap">
+    <div class="sec-head prose">
+      <p class="kicker">Before first run</p>
+      <h2>Setup</h2>
+      <p>The pipeline reads its keys and tool paths from <code>config.env</code> at the project
+        root. Fill these in once; <code>triage.sh</code> sources the file automatically.</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Variable</th><th>Purpose</th><th>Used by stage</th></tr></thead>
+        <tbody>
+          <tr><td><code>VT_API_KEY</code></td><td>VirusTotal v3 API key</td><td>VirusTotal lookup</td></tr>
+          <tr><td><code>BAZAAR_API_KEY</code></td><td>abuse.ch MalwareBazaar key</td><td>MalwareBazaar lookup</td></tr>
+          <tr><td><code>ABUSEIPDB_API_KEY</code></td><td>AbuseIPDB key</td><td>IP reputation</td></tr>
+          <tr><td><code>CAPA_RULES</code></td><td>Path to the capa rules directory</td><td>capa</td></tr>
+          <tr><td><code>YARA_RULES_DIR</code></td><td>Root holding <code>yara-rules/</code> &amp; <code>signature-base/</code></td><td>YARA</td></tr>
+          <tr><td><code>PESTATS</code></td><td>Path to <code>pestats.py</code></td><td>PE structure</td></tr>
+          <tr><td><code>GHIDRA_HOME</code></td><td>Ghidra install dir (<code>/opt/ghidra</code>)</td><td>Deep RE (<code>--deep</code>)</td></tr>
+          <tr><td><code>GHIDRA_SCRIPTS</code></td><td>Path holding <code>ExportGhidra.java</code></td><td>Deep RE (<code>--deep</code>)</td></tr>
+          <tr><td><code>UNPACK</code></td><td>Path to <code>unpack_emulate.py</code></td><td>Emulation unpacking (<code>--unpack</code>)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p><strong>Required CLI tools</strong> (already present on this Kali box):
+        <code>diec</code>, <code>floss</code>, <code>capa</code>, <code>yara</code>,
+        <code>radare2</code>/<code>rabin2</code>, <code>binwalk</code>, <code>upx</code>,
+        plus <code>curl</code> and <code>python3</code>. The optional <code>--deep</code> stage
+        adds <strong>Ghidra 12.1.2</strong> (headless, pinned to JDK 21) — install it once with
+        <code>sudo bash tools/ghidra/install-ghidra.sh</code>. The optional <code>--unpack</code>
+        stage adds <strong>Mandiant Speakeasy</strong> (emulation unpacking), installed into the
+        project venv by <code>bash tools/setup-env.sh</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="resources">
+  <div class="wrap">
+    <div class="sec-head prose">
+      <p class="kicker">Host resources</p>
+      <h2>System requirements &amp; staying within limits</h2>
+      <p>Triage is resource-hungry in two distinct places, and each has its own failure mode if the
+        host is under-provisioned. Size the box for the heavy stages, and the pipeline runs
+        crash-free.</p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Resource</th><th class="num">Minimum</th><th class="num">Recommended</th><th>Why it matters</th></tr></thead>
+        <tbody>
+          <tr><td><strong>RAM</strong></td><td class="num">8 GB</td><td class="num">16 GB</td><td>Ghidra (<code>--deep</code>) is a JVM wanting a multi-GB heap; Speakeasy (<code>--unpack</code>) emulates a full PE in memory; <code>floss</code>+<code>capa</code> are memory-heavy even in a base run. Below 8 GB the Linux OOM-killer terminates a process mid-run.</td></tr>
+          <tr><td><strong>vCPU</strong></td><td class="num">2</td><td class="num">4</td><td><code>capa</code> and Ghidra analysis are CPU-bound; 4 cores keep base triage to a few minutes.</td></tr>
+          <tr><td><strong>Swap</strong></td><td class="num">2 GB</td><td class="num">4–8 GB</td><td>A safety net, not speed: under a memory spike the kernel pages to swap (slow) instead of OOM-killing (a hard crash). Worth having even at 16 GB.</td></tr>
+          <tr><td><strong>Disk</strong></td><td class="num">20 GB</td><td class="num">40 GB+</td><td>Ghidra projects, carved <code>unpacked/</code> payloads, and the report dirs accumulate.</td></tr>
+          <tr><td><strong>Java (JDK)</strong></td><td class="num">21</td><td class="num">21</td><td>Only for <code>--deep</code>; Ghidra 12.1.2 is pinned to JDK 21 by its installer.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <p><strong>Two crash modes — and how the skill avoids each.</strong></p>
+      <p><strong>1 · Out-of-memory (the process dies).</strong> Caused by stacking the heavy stages.
+        The skill runs them <strong>one at a time, never together</strong> — separate
+        <code>triage.sh</code> invocations, <code>--unpack</code> before <code>--deep</code> — so an
+        8 GB host comfortably handles base triage plus one heavy stage. More RAM (not swap) is the
+        real fix; swap just turns a hard kill into a slowdown.</p>
+      <p><strong>2 · Context-window exhaustion (the analysis dies).</strong> Independent of RAM —
+        caused by the analyst reading huge artifacts verbatim (<code>floss.json</code> ≈ 800 KB,
+        <code>capa.json</code> ≈ 400 KB, a multi-child <code>archive</code> report &gt; 9 MB). The
+        skill now reads <strong>size-aware</strong>: small artifacts in full, large ones
+        <em>mined</em> with Python for just their relevant fields, and archive children processed
+        one at a time. Every artifact is still accounted for — the big ones are mined, not dumped.</p>
+    </div>
+
+    <div class="note">
+      <p><strong>Rule of thumb on this box.</strong> Analyze <strong>one sample at a time</strong>,
+        let each run finish before starting the next, and don't manually fire <code>--deep</code>
+        and <code>--unpack</code> in the same command. The skill already enforces this when you use
+        <code>/analyze-sample</code>; it only matters if you drive <code>triage.sh</code> by hand.</p>
+    </div>
+  </div>
+</section>
+
+<section id="pipeline">
+  <div class="wrap">
+    <div class="sec-head prose">
+      <p class="kicker">What runs, in order</p>
+      <h2>The collection pipeline</h2>
+      <p>This is what <code>./triage.sh &lt;sample&gt;</code> executes. It is no longer a fixed
+        line — a <strong>routing front door</strong> (stage 1) identifies the file type, then the
+        <strong>universal stages</strong> run on every sample while the <strong>format-routed
+        stages</strong> run only what fits. For a PE that is <strong>13 always-on stages</strong>
+        (shown below) plus <strong>two deep stages</strong> (<code>--deep</code>,
+        <code>--unpack</code>) that the skill now <strong>auto-escalates when the evidence warrants</strong>
+        — see <a href="#deeper">Going deeper</a> for the trigger rules. Non-PE samples (Office / PDF / LNK / archive / email) skip the
+        binary block and route to <code>tools/nonpe.py</code> instead. Each stage writes one
+        artifact into the timestamped report dir; floss and capa are the slow ones (minutes).</p>
+    </div>
+
+    <div class="stages">
+      <div class="stage">
+        <div class="stage-idx">1</div>
+        <div class="stage-body">
+          <h3>Identify &amp; route <span style="font-weight:500;color:var(--muted);font-size:.85rem">— the front door</span></h3>
+          <div class="tool">identify.py · magic + file + extension</div>
+          <p>Classifies the input (PE / .NET / ELF / Office / PDF / LNK / script / archive / email /
+            unknown) and flags <strong>extension↔content mismatch</strong> (masquerade, e.g. PE bytes
+            named <code>invoice.pdf</code>). This verdict decides which routed stages run — every
+            later stage keys off it.</p>
+          <div class="cmd"><span class="pr">$</span> python3 "$IDENTIFY" "$SAMPLE" "$REPORT_DIR/fileinfo.json"</div>
+          <div class="out">→ <b>fileinfo.json</b> <span style="color:var(--accent)">&nbsp;· read this first</span></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">2</div>
+        <div class="stage-body">
+          <h3>Hashing &amp; fingerprint</h3>
+          <div class="tool">md5sum · sha1sum · sha256sum</div>
+          <p>Computes the identity of the sample. The SHA-256 becomes the lookup key for every
+            reputation service downstream.</p>
+          <div class="cmd"><span class="pr">$</span> sha256sum "$SAMPLE"</div>
+          <div class="out">→ <b>hashes.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">3</div>
+        <div class="stage-body">
+          <h3>VirusTotal lookup</h3>
+          <div class="tool">curl · VT API v3</div>
+          <p>Pulls multi-engine verdicts, the suggested threat label, crowdsourced YARA, TrID,
+            and PE metadata. Your strongest single signal for family attribution.</p>
+          <div class="cmd"><span class="pr">$</span> curl -s --url \
+   "https://www.virustotal.com/api/v3/files/$SHA256" \
+   --header <span class="fl">"x-apikey: $VT_API_KEY"</span></div>
+          <div class="out">→ <b>virustotal.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">4</div>
+        <div class="stage-body">
+          <h3>MalwareBazaar lookup</h3>
+          <div class="tool">curl · abuse.ch</div>
+          <p>Checks whether the hash is a known, shared sample — and if so, its community family
+            signature and tags. A hit lets you pivot on the family immediately.</p>
+          <div class="cmd"><span class="pr">$</span> curl -s -X POST --url "https://mb-api.abuse.ch/api/v1/" \
+   --header <span class="fl">"Auth-Key: $BAZAAR_API_KEY"</span> \
+   --data <span class="fl">"query=get_info&amp;hash=$SHA256"</span></div>
+          <div class="out">→ <b>malwarebazaar.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">5</div>
+        <div class="stage-body">
+          <h3>Packer / compiler detection <span style="font-weight:500;color:var(--muted);font-size:.85rem">— PE/.NET/ELF route</span></h3>
+          <div class="tool">Detect-It-Easy (diec)</div>
+          <p>Identifies the compiler, linker, and any packer/crypter. Tells you whether you are
+            looking at clean code or something obfuscated before you spend time on it.</p>
+          <div class="cmd"><span class="pr">$</span> diec --json "$SAMPLE"</div>
+          <div class="out">→ <b>die.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">6</div>
+        <div class="stage-body">
+          <h3>PE structure <span style="font-weight:500;color:var(--muted);font-size:.85rem">— PE/.NET route</span></h3>
+          <div class="tool">pestats.py</div>
+          <p>Parses headers, sections (entropy, permissions), the import table, TLS callbacks,
+            digital signature, and — crucially — any high-entropy <em>overlay</em> that hints at a
+            packed payload.</p>
+          <div class="cmd"><span class="pr">$</span> python3 "$PESTATS" "$SAMPLE"</div>
+          <div class="out">→ <b>peinfo.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">7</div>
+        <div class="stage-body">
+          <h3>String extraction &amp; deobfuscation <span style="font-weight:500;color:var(--muted);font-size:.85rem">— PE/.NET/ELF route</span></h3>
+          <div class="tool">FLARE FLOSS</div>
+          <p>Beyond plain strings, FLOSS emulates the binary to recover <em>decoded</em>,
+            stack, and tight strings — surfacing XOR-hidden URLs, domains, registry keys, and
+            file names. The richest artifact, and the one to mine carefully.</p>
+          <div class="cmd"><span class="pr">$</span> floss --json "$SAMPLE"</div>
+          <div class="out">→ <b>floss.json</b> <span style="color:var(--sev-med)">&nbsp;· slow (minutes)</span></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">8</div>
+        <div class="stage-body">
+          <h3>Capability mapping <span style="font-weight:500;color:var(--muted);font-size:.85rem">— PE/.NET/ELF route</span></h3>
+          <div class="tool">Mandiant capa</div>
+          <p>Matches code against a rule set to name concrete capabilities and map them to
+            MITRE ATT&amp;CK. Note: capa sees only what it can disassemble — a packed payload can
+            come back empty, which is itself a finding.</p>
+          <div class="cmd"><span class="pr">$</span> capa --rules "$CAPA_RULES" --json "$SAMPLE"</div>
+          <div class="out">→ <b>capa.json</b> <span style="color:var(--sev-med)">&nbsp;· slow (minutes)</span></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">9</div>
+        <div class="stage-body">
+          <h3>YARA signatures <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal</span></h3>
+          <div class="tool">yara · local + signature-base</div>
+          <p>Runs your local rules and the Neo23x0 signature-base recursively, flagging known
+            family patterns, packers, and suspicious traits (mutexes, VM-detection, Winsock).</p>
+          <div class="cmd"><span class="pr">$</span> yara -r "$YARA_RULES_DIR/yara-rules/index.yar" "$SAMPLE"
+<span class="pr">$</span> yara -r "$YARA_RULES_DIR/signature-base/index.yml" "$SAMPLE"</div>
+          <div class="out">→ <b>yara.txt</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">10</div>
+        <div class="stage-body">
+          <h3>IP reputation <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal</span></h3>
+          <div class="tool">python · AbuseIPDB</div>
+          <p>Parses <code>floss.json</code> for IP literals, drops private ranges, and checks the
+            first five public IPs against AbuseIPDB. Empty when the sample hides its C2 behind
+            domains rather than hardcoded IPs.</p>
+          <div class="cmd"><span class="pr">$</span> python3  <span class="cm"># extract public IPs → AbuseIPDB /api/v2/check</span></div>
+          <div class="out">→ <b>abuseipdb.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">11</div>
+        <div class="stage-body">
+          <h3>Domain / C2 reputation <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal</span></h3>
+          <div class="tool">python · ThreatFox · URLhaus · VT-domain</div>
+          <p>Closes AbuseIPDB's blind spot for domain-based C2. Pulls hosts from
+            <code>floss.json</code> (URL-derived hosts first, bare matches filtered for noise) and
+            checks each against <strong>ThreatFox</strong> (known-IOC + malware family),
+            <strong>URLhaus</strong> (malware-distribution URLs), and the
+            <strong>VirusTotal domains API</strong> (verdict + passive-DNS resolutions → real C2
+            IPs). abuse.ch reuses your unified Auth-Key; VT-domain reuses the VT key.</p>
+          <div class="cmd"><span class="pr">$</span> python3 tools/domain_rep.py "$REPORT_DIR/floss.json" "$REPORT_DIR/domain_rep.json"</div>
+          <div class="out">→ <b>domain_rep.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">12</div>
+        <div class="stage-body">
+          <h3>VirusTotal pivoting <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal (when VT-known)</span></h3>
+          <div class="tool">python · VT API v3 relationships</div>
+          <p>Expands one sample into its family/campaign. <strong>Forward</strong>: the sample's own
+            footprint (contacted domains/IPs, dropped files, ITW URLs). <strong>Reverse</strong>:
+            sibling samples that share an indicator or the same <code>imphash</code>. Paced for the
+            VT public-tier rate limit; gated reverse pivots are captured as a 403, not a crash.</p>
+          <div class="cmd"><span class="pr">$</span> python3 tools/vt_pivot.py "$REPORT_DIR/virustotal.json" "$REPORT_DIR/vt_pivot.json"</div>
+          <div class="out">→ <b>vt_pivot.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">13</div>
+        <div class="stage-body">
+          <h3>Tool &amp; rule-set provenance <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal</span></h3>
+          <div class="tool">python · versions + rule-set commits</div>
+          <p>Stamps the exact stack that produced the report — each tool's version (capa, floss, die,
+            yara, ghidra, speakeasy, python) and each rule-set's git commit + date — bound to the
+            sample hash. Makes every report reproducible and audit-grade. Local-only, runs last.</p>
+          <div class="cmd"><span class="pr">$</span> python3 tools/provenance.py "$REPORT_DIR"</div>
+          <div class="out">→ <b>provenance.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">++</div>
+        <div class="stage-body">
+          <h3>Ghidra deep RE <span style="font-weight:500;color:var(--muted);font-size:.85rem">— auto when a code-level question remains, <code>--deep</code></span></h3>
+          <div class="tool">Ghidra 12.1.2 · headless</div>
+          <p>Triggered by <code>./triage.sh &lt;sample&gt; --deep</code> — which the skill fires
+            automatically when a decrypt / loader / C2 routine is worth decompiling (on a packed
+            sample, only <em>after</em> <code>--unpack</code>, pointed at the recovered body). Runs Ghidra's headless analyzer
+            and a Java export script that emits a function inventory, imports, strings, and
+            <em>targeted decompiled C</em> (entry point + functions calling network/crypto/loader
+            APIs — not a full dump). Slow and heavy, so it is off by default. On a packed crypter it
+            sees only the loader stub, not the encrypted overlay.</p>
+          <div class="cmd"><span class="pr">$</span> "$GHIDRA_HOME/support/analyzeHeadless" … \
+   -postScript <span class="fl">ExportGhidra.java</span> "$REPORT_DIR/ghidra.json"</div>
+          <div class="out">→ <b>ghidra.json</b> <span style="color:var(--sev-med)">&nbsp;· slow (minutes), opt-in</span></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">++</div>
+        <div class="stage-body">
+          <h3>Emulation unpacking <span style="font-weight:500;color:var(--muted);font-size:.85rem">— auto when the PE looks packed, <code>--unpack</code> · PE only</span></h3>
+          <div class="tool">Mandiant Speakeasy · CPU emulator</div>
+          <p>Triggered by <code>./triage.sh &lt;sample&gt; --unpack</code> — which the skill fires
+            automatically when <code>die</code> names a packer or <code>peinfo</code> shows high
+            entropy / a tiny import table / a large overlay. The sandbox-free answer to a
+            <em>packed</em> sample: it emulates <strong>only the loader stub</strong> in Speakeasy
+            (Windows-API emulation — <strong>no VM, no detonation, no network</strong>), lets the
+            stub self-decrypt in emulated memory, <strong>carves the recovered payload</strong>,
+            then re-runs floss / capa / YARA on the <em>real body</em> into an <code>unpacked/</code>
+            subdir. When the stub bails early (unsupported API, anti-emulation, remote-keyed) it
+            records a <strong>gap</strong> and points you to a sandbox — it never fakes an unpack.
+            Recovers <em>embedded</em> indicators only (not confirmed-live behaviour).</p>
+          <div class="cmd"><span class="pr">$</span> python3 tools/unpack_emulate.py "$SAMPLE" "$REPORT_DIR" "$REPORT_DIR/fileinfo.json"
+<span class="cm"># then floss/capa/yara re-run on the carved payload → unpacked/</span></div>
+          <div class="out">→ <b>unpacked.json</b> + <b>unpacked/</b> <span style="color:var(--sev-med)">&nbsp;· opt-in, PE only</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="run">
+  <div class="wrap">
+    <div class="sec-head prose">
+      <p class="kicker">Three ways</p>
+      <h2>Ways to run it</h2>
+      <p>All of these work from inside Claude Code — you don't need a separate terminal.</p>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <span class="tag best">Recommended</span>
+        <h3>The skill</h3>
+        <p>One command, raw sample or existing report directory. Collects, analyzes, and writes
+          the report.</p>
+        <div class="cmd"><span class="pr">&gt;</span> /analyze-sample <span class="fl">samples/X.exe</span></div>
+      </div>
+      <div class="card">
+        <span class="tag">Inline</span>
+        <h3>The <code>!</code> prefix</h3>
+        <p>Run the collector yourself in-session; its output lands in the conversation, then call
+          the skill.</p>
+        <div class="cmd"><span class="pr">&gt;</span> ! ./triage.sh <span class="fl">samples/X.exe</span></div>
+      </div>
+      <div class="card">
+        <span class="tag">Manual</span>
+        <h3>Your terminal</h3>
+        <p>Classic two-step. The script prints the exact <code>/analyze-sample</code> line to run
+          when it finishes.</p>
+        <div class="cmd"><span class="pr">$</span> ./triage.sh <span class="fl">samples/X.exe</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="output">
+  <div class="wrap">
+    <div class="sec-head prose">
+      <p class="kicker">What you get</p>
+      <h2>Reading the output</h2>
+      <p>Everything for one run lives in a single timestamped directory. The JSON/text artifacts are
+        the evidence; <code>analysis_report.md</code> is the analyst's write-up over them, and
+        <code>analysis_report.html</code> is the rendered deliverable.</p>
+    </div>
+
+    <div class="cmd" style="font-size:.82rem; line-height:1.7;">reports/Ransomware.exe_20260626_092953/
+├─ hashes.json          <span class="cm"># identity</span>
+├─ virustotal.json      <span class="cm"># multi-engine verdicts + labels</span>
+├─ malwarebazaar.json   <span class="cm"># known-sample family / tags</span>
+├─ die.json             <span class="cm"># compiler &amp; packer</span>
+├─ peinfo.json          <span class="cm"># PE headers, sections, imports, overlay</span>
+├─ floss.json           <span class="cm"># decoded + static strings</span>
+├─ capa.json            <span class="cm"># capabilities → ATT&amp;CK</span>
+├─ yara.txt             <span class="cm"># signature matches</span>
+├─ abuseipdb.json       <span class="cm"># IP reputation</span>
+├─ domain_rep.json      <span class="cm"># domain/C2 reputation (ThreatFox, URLhaus, VT-domain)</span>
+├─ ghidra.json          <span class="cm"># decompiled funcs (only with --deep)</span>
+├─ analysis_report.md   <span class="cm"># the written analysis (source the HTML is built from)</span>
+├─ analysis_report.html <span class="ok"># ← the deliverable, auto-generated every run</span>
+└─ analysis_report.{pdf,docx}  <span class="cm"># extra formats, on request</span></div>
+
+    <h3>What the report always contains</h3>
+    <p>The structure is fixed by <code>CLAUDE.md</code> so every report is comparable:</p>
+    <ul class="clean">
+      <li><strong>Executive Summary</strong> — 3–5 plain-language sentences.</li>
+      <li><strong>Threat Assessment</strong> — family, type, confidence, severity.</li>
+      <li><strong>Hypothesis List</strong> — each claim with confidence, cited evidence, and a next action.</li>
+      <li><strong>IOC Table</strong> — hashes, domains, IPs, registry keys, files, mutexes.</li>
+      <li><strong>ATT&amp;CK TTP List</strong> — techniques prioritized by severity.</li>
+      <li><strong>Recommended Next Steps</strong> — gaps and how to close them.</li>
+    </ul>
+
+    <h3>How confidence is labelled</h3>
+    <p>Findings are graded, not stated as fact — static analysis proves capability, not behavior:</p>
+    <p style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+      <span class="pill p-ok">High</span> confirmed across multiple sources &nbsp;
+      <span class="pill p-med">Medium</span> suggested by one or two &nbsp;
+      <span class="pill p-info">Investigate</span> a lead to chase
+    </p>
+    <div class="note">
+      <p><strong>The strongest findings cross sources.</strong> A capability that shows up in the
+        imports <em>and</em> the decoded strings <em>and</em> a YARA hit is far more credible than
+        any one tool's output alone. The agent is told to weight evidence that corroborates.</p>
+    </div>
+
+    <h3>The HTML report is generated automatically</h3>
+    <p>The <code>.md</code> is the source of record — written first, always kept. But the
+      <strong>deliverable is <code>analysis_report.html</code></strong>, and the skill builds it
+      <strong>automatically every run</strong> (no prompt) with the bundled cross-platform exporter
+      (Windows / Linux / macOS):</p>
+    <div class="cmd"><span class="pr">$</span> python3 .claude/skills/analyze-sample/export_report.py \
+   reports/&lt;name&gt;_&lt;ts&gt;/analysis_report.md <span class="fl">--to html</span></div>
+    <div class="note">
+      <p><strong>One dependency: <code>pandoc</code>.</strong> The HTML is a self-contained,
+        styled, dark-theme page (CSS embedded — nothing external to load). <strong>PDF and DOCX
+        are still available on request</strong> (<code>--to pdf</code> / <code>--to docx</code> /
+        <code>--to all</code>); the PDF is pandoc-rendered HTML printed by a <strong>headless
+        browser</strong> (Edge on Windows, Chrome / Chromium / Brave elsewhere — auto-detected),
+        no LaTeX or weasyprint, and long hashes wrap correctly. Everything lands next to the
+        <code>.md</code>, which is never replaced.</p>
+    </div>
+  </div>
+</section>
+
+<section id="deeper">
+  <div class="wrap">
+    <div class="sec-head prose">
+      <p class="kicker">When a sample is packed</p>
+      <h2>Going deeper</h2>
+      <p>The skill now <strong>auto-escalates</strong> the two deep stages when the base artifacts
+        call for it — you don't pass the flags yourself. After the base run it inspects
+        <code>fileinfo.json</code>, <code>die</code>, and <code>peinfo.json</code> and decides:</p>
+    </div>
+
+    <div class="cards" style="margin-bottom:1.6em;">
+      <div class="card">
+        <span class="tag">Trigger 1 · packed PE</span>
+        <h3>→ auto <code>--unpack</code></h3>
+        <p>Fires when it's a PE that looks packed: <code>die</code> names a packer, or
+          <code>peinfo</code> shows ~7.0+ section entropy, a very small import table, or a
+          large/high-entropy overlay. Skipped for non-PE types and plainly-unpacked PEs.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Trigger 2 · code-level question</span>
+        <h3>→ auto <code>--deep</code></h3>
+        <p>Fires when a decrypt / loader / C2 routine is worth reading as code. On a packed sample
+          it runs <em>after</em> <code>--unpack</code>, pointed at the recovered body — never at the
+          loader stub.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <p><strong>Order &amp; sequencing.</strong> Unpack before deep (Ghidra on a packed stub only
+        sees the loader). The stages run <strong>one at a time, never stacked</strong> — each is a
+        separate <code>triage.sh</code> invocation — and the skill tells you before each fires and
+        why (e.g. <em>"die flags UPX + 7.9 entropy → auto-running <code>--unpack</code>"</em>), or
+        notes in one line when one is skipped. On the existing-report-dir / Windows path it can't
+        re-trigger collection, so it recommends the flag as a next step instead.</p>
+    </div>
+
+    <div class="sec-head prose" style="margin-top:1.8em;">
+      <p>Once escalated, the deep pass itself proceeds as:</p>
+    </div>
+    <ol class="steps prose">
+      <li><strong>Carve &amp; characterize</strong> the overlay (entropy, header bytes, embedded signatures via <code>binwalk</code>).</li>
+      <li><strong>Try the easy unpack</strong> first — <code>upx -t</code> and known-packer checks.</li>
+      <li><strong>Locate the decryptor</strong> in <code>radare2</code>: cross-reference file-read and <code>GetModuleFileNameA</code> calls, then disassemble the candidate functions (cross-checked against FLOSS's decoding-function scores).</li>
+      <li><strong>Read it as C</strong> — with <code>--deep</code>, <code>ghidra.json</code> carries decompiled pseudocode for the loader/decrypt functions, which is faster to reason over than disassembly. (Verified on <code>av45i.exe</code>: it pinned the Protected-Storage credential routine and a process-watchdog respawn thread.)</li>
+      <li><strong>Recover the algorithm</strong> if it is self-contained (e.g. a single-byte XOR) — and dump the cleartext.</li>
+    </ol>
+    <div class="note warn">
+      <p><strong>Two honest limits.</strong> If a payload is keyed at runtime or from C2, static
+        unpacking hits a wall — the report says so plainly rather than inventing a result. And the
+        sample is <em>never executed</em>; confirming dynamic behavior needs an isolated detonation
+        sandbox, which is out of scope for this host.</p>
+    </div>
+  </div>
+</section>
+
+<section id="safety">
+  <div class="wrap">
+    <div class="sec-head prose">
+      <p class="kicker">Operating discipline</p>
+      <h2>Safety &amp; good practice</h2>
+    </div>
+    <ul class="clean prose">
+      <li><strong>Never run the sample.</strong> The whole pipeline is static. Treat files in <code>samples/</code> as live ordnance.</li>
+      <li><strong>Reputation lookups leave your network.</strong> Stages 2, 3, and the IP/domain checks send the hash, extracted IPs, and extracted domains to VirusTotal, MalwareBazaar, AbuseIPDB, and abuse.ch (ThreatFox/URLhaus). Don't submit indicators you need to keep confidential.</li>
+      <li><strong>Guard <code>config.env</code>.</strong> It holds live API keys in plaintext — keep it out of version control and shared screenshots.</li>
+      <li><strong>Conclusions are theories.</strong> Every claim is graded and cited; confirm the important ones dynamically before you act on them.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="cheat">
+  <div class="wrap">
+    <div class="sec-head prose">
+      <p class="kicker">Keep this handy</p>
+      <h2>Cheat sheet</h2>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Goal</th><th>Command</th></tr></thead>
+        <tbody>
+          <tr><td>Full run from a raw sample <span style="color:var(--muted)">(auto-escalates <code>--unpack</code>/<code>--deep</code> as needed)</span></td><td><code>/analyze-sample samples/X.exe</code></td></tr>
+          <tr><td>List samples &amp; choose which to analyze</td><td><code>/analyze-sample</code> (no argument)</td></tr>
+          <tr><td>Analyze a specific run</td><td><code>/analyze-sample reports/X.exe_20260626_092953</code></td></tr>
+          <tr><td>Collect artifacts only</td><td><code>./triage.sh samples/X.exe</code></td></tr>
+          <tr><td>Collect + Ghidra deep RE <span style="color:var(--muted)">(manual override)</span></td><td><code>./triage.sh samples/X.exe --deep</code></td></tr>
+          <tr><td>Collect + emulation unpack <span style="color:var(--muted)">(manual override, PE only)</span></td><td><code>./triage.sh samples/X.exe --unpack</code></td></tr>
+          <tr><td>Collect in-session</td><td><code>! ./triage.sh samples/X.exe</code></td></tr>
+          <tr><td>HTML report (auto every run; manual re-gen / extra formats)</td><td><code>python3 .claude/skills/analyze-sample/export_report.py reports/&lt;dir&gt;/analysis_report.md --to html</code> (or <code>--to all</code>)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Sharingan — static analysis pipeline for Windows PE samples.</span>
+    <span style="font-family:var(--mono); color:var(--faint);">collect · correlate · report</span>
+  </div>
+</footer>
