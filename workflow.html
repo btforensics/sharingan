@@ -279,12 +279,12 @@
   <div class="masthead-inner">
     <p class="kicker">Sharingan · Malware-triage · Kali Linux · Claude Code</p>
     <h1>The <span class="em">Sharingan</span> Triage Workflow</h1>
-    <p class="lead">A static-analysis pipeline that fingerprints a Windows sample with eight
+    <p class="lead">A static-analysis pipeline that fingerprints a Windows sample with nine
       tools, then hands the artifacts to an analyst agent that reasons across all of them and
       writes the report — start to finish in one command.</p>
     <div class="chips">
       <span class="chip"><b>1</b> command, end to end</span>
-      <span class="chip"><b>13</b>-stage pipeline + auto-escalated deep stages</span>
+      <span class="chip"><b>14</b>-stage pipeline + auto-escalated deep stages</span>
       <span class="chip"><b>static</b> only — never executed</span>
       <span class="chip">output: <b>analysis_report.html</b></span>
     </div>
@@ -344,7 +344,7 @@
       <div class="flow-step">
         <span class="n">COLLECT</span>
         <h4>triage.sh</h4>
-        <p>Eight tools + reputation lookups dump structured artifacts.</p>
+        <p>Nine tools + reputation lookups dump structured artifacts.</p>
       </div>
       <div class="flow-arrow" aria-hidden="true">→</div>
       <div class="flow-step">
@@ -389,6 +389,7 @@
           <tr><td><code>GHIDRA_HOME</code></td><td>Ghidra install dir (<code>/opt/ghidra</code>)</td><td>Deep RE (<code>--deep</code>)</td></tr>
           <tr><td><code>GHIDRA_SCRIPTS</code></td><td>Path holding <code>ExportGhidra.java</code></td><td>Deep RE (<code>--deep</code>)</td></tr>
           <tr><td><code>UNPACK</code></td><td>Path to <code>unpack_emulate.py</code></td><td>Emulation unpacking (<code>--unpack</code>)</td></tr>
+          <tr><td><code>CONFIGEXT</code></td><td>Path to <code>config_extract.py</code></td><td>Config / C2 extraction</td></tr>
         </tbody>
       </table>
     </div>
@@ -400,7 +401,9 @@
         adds <strong>Ghidra 12.1.2</strong> (headless, pinned to JDK 21) — install it once with
         <code>sudo bash tools/ghidra/install-ghidra.sh</code>. The optional <code>--unpack</code>
         stage adds <strong>Mandiant Speakeasy</strong> (emulation unpacking), installed into the
-        project venv by <code>bash tools/setup-env.sh</code>.</p>
+        project venv by <code>bash tools/setup-env.sh</code> — which also installs
+        <strong>configextractor-py</strong> + the CAPE / rat-king parser packs that drive the
+        config-extraction stage.</p>
     </div>
   </div>
 </section>
@@ -460,7 +463,7 @@
       <p>This is what <code>./triage.sh &lt;sample&gt;</code> executes. It is no longer a fixed
         line — a <strong>routing front door</strong> (stage 1) identifies the file type, then the
         <strong>universal stages</strong> run on every sample while the <strong>format-routed
-        stages</strong> run only what fits. For a PE that is <strong>13 always-on stages</strong>
+        stages</strong> run only what fits. For a PE that is <strong>14 always-on stages</strong>
         (shown below) plus <strong>two deep stages</strong> (<code>--deep</code>,
         <code>--unpack</code>) that the skill now <strong>auto-escalates when the evidence warrants</strong>
         — see <a href="#deeper">Going deeper</a> for the trigger rules. Non-PE samples (Office / PDF / LNK / archive / email) skip the
@@ -577,6 +580,24 @@
       <div class="stage">
         <div class="stage-idx">9</div>
         <div class="stage-body">
+          <h3>Config / C2 extraction <span style="font-weight:500;color:var(--muted);font-size:.85rem">— PE/.NET/ELF route</span></h3>
+          <div class="tool">configextractor-py · CAPE + rat-king parser packs</div>
+          <p>For a <em>recognized</em> family (AsyncRAT, Remcos, RedLine, QakBot, Lumma, Cobalt
+            Strike, … — <strong>61 parsers</strong>) it statically rips the embedded
+            <strong>config block</strong>: C2 hosts/ports, encryption keys, campaign/botnet IDs,
+            mutex, install paths. These are often AES-encrypted in the binary and so
+            <em>invisible to strings/floss</em> — this is what surfaces them. Not a reputation
+            lookup: per-family parsers decrypt <em>this</em> sample, so the IOCs can be brand-new
+            and feed back into the reputation + pivot stages. <code>no_match</code> is a real
+            result; it also re-runs on the <code>--unpack</code> recovered body.</p>
+          <div class="cmd"><span class="pr">$</span> python3 tools/config_extract.py "$SAMPLE" "$REPORT_DIR/config.json"</div>
+          <div class="out">→ <b>config.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">10</div>
+        <div class="stage-body">
           <h3>YARA signatures <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal</span></h3>
           <div class="tool">yara · local + signature-base</div>
           <p>Runs your local rules and the Neo23x0 signature-base recursively, flagging known
@@ -588,7 +609,7 @@
       </div>
 
       <div class="stage">
-        <div class="stage-idx">10</div>
+        <div class="stage-idx">11</div>
         <div class="stage-body">
           <h3>IP reputation <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal</span></h3>
           <div class="tool">python · AbuseIPDB</div>
@@ -601,7 +622,7 @@
       </div>
 
       <div class="stage">
-        <div class="stage-idx">11</div>
+        <div class="stage-idx">12</div>
         <div class="stage-body">
           <h3>Domain / C2 reputation <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal</span></h3>
           <div class="tool">python · ThreatFox · URLhaus · VT-domain</div>
@@ -617,7 +638,7 @@
       </div>
 
       <div class="stage">
-        <div class="stage-idx">12</div>
+        <div class="stage-idx">13</div>
         <div class="stage-body">
           <h3>VirusTotal pivoting <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal (when VT-known)</span></h3>
           <div class="tool">python · VT API v3 relationships</div>
@@ -631,12 +652,12 @@
       </div>
 
       <div class="stage">
-        <div class="stage-idx">13</div>
+        <div class="stage-idx">14</div>
         <div class="stage-body">
           <h3>Tool &amp; rule-set provenance <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal</span></h3>
           <div class="tool">python · versions + rule-set commits</div>
           <p>Stamps the exact stack that produced the report — each tool's version (capa, floss, die,
-            yara, ghidra, speakeasy, python) and each rule-set's git commit + date — bound to the
+            yara, ghidra, speakeasy, configextractor, python) and each rule-set's git commit + date — bound to the
             sample hash. Makes every report reproducible and audit-grade. Local-only, runs last.</p>
           <div class="cmd"><span class="pr">$</span> python3 tools/provenance.py "$REPORT_DIR"</div>
           <div class="out">→ <b>provenance.json</b></div>
@@ -736,6 +757,7 @@
 ├─ peinfo.json          <span class="cm"># PE headers, sections, imports, overlay</span>
 ├─ floss.json           <span class="cm"># decoded + static strings</span>
 ├─ capa.json            <span class="cm"># capabilities → ATT&amp;CK</span>
+├─ config.json          <span class="cm"># extracted family config (C2/keys/mutex) — when a parser matches</span>
 ├─ yara.txt             <span class="cm"># signature matches</span>
 ├─ abuseipdb.json       <span class="cm"># IP reputation</span>
 ├─ domain_rep.json      <span class="cm"># domain/C2 reputation (ThreatFox, URLhaus, VT-domain)</span>
