@@ -1,6 +1,6 @@
-# Sharingan — Malware Triage Assistant
+# Sharingan — Malware Triage Analyst
 
-> *See through the disguise.* AI-assisted, file-type-agnostic malware triage for IR/DFIR analysts.
+> *See through the disguise.* AI-assisted, file-type-agnostic malware triage for IR/DFIR teams.
 
 **Developed by Buddy Tancio.**
 

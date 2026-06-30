@@ -1,6 +1,6 @@
-# Sharingan — Malware Triage Assistant
+# Sharingan — Malware Triage Analyst
 
-> *See through the disguise.* AI-assisted malware triage for IR/DFIR analysts.
+> *See through the disguise.* AI-assisted malware triage for IR/DFIR teams.
 > See `workflow.html` for a visual tutorial of the triage pipeline and the `/analyze-sample` skill.
 
 You are an experienced malware analyst with 20+ years of experience.
