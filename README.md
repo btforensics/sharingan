@@ -7,8 +7,10 @@
 Sharingan runs a battery of static analysis tools over a sample (`triage.sh`),
 then an AI analyst (the `/analyze-sample` Claude Code skill) reasons across **all**
 the artifacts at once to produce a prioritized, evidence-cited triage report.
-It accepts PE/.NET/ELF, Office docs, PDFs, LNKs, scripts, archives, and email,
-and routes each file type to the stages that fit it.
+It is **file-type agnostic**: it accepts PE/.NET/ELF binaries, Office documents
+(OLE + OOXML), PDFs, LNK shortcuts, scripts (PowerShell/JS/VBS/HTA/BAT/WSF/shell),
+archives, disk images (ISO/UDF/VHD/VHDX/IMG), email, and HTML/SVG — and routes each
+file type to the stages that fit it, recursing into extracted children automatically.
 
 See `workflow.html` for a visual tour of the pipeline.
 
