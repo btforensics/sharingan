@@ -16,6 +16,35 @@ See `workflow.html` for a visual tour of the pipeline.
 
 ---
 
+## What it does (analysis stages)
+
+For each sample Sharingan runs the stages that fit its type, then the AI analyst
+reasons across all of them at once:
+
+- **File-type ID & routing** — category/subtype detection; masquerade / extension-mismatch flagging
+- **Reputation & pivoting** — VirusTotal, MalwareBazaar, and VT-pivot (imphash / communicating-file siblings)
+- **Runtime behaviour** — VT sandbox behaviour ingestion (network, dropped files, registry, mutexes, processes) — the one *confirmed-observed* source
+- **Strings** — FLOSS (binaries) + universal strings for every type
+- **PE structure** — imports, sections, entropy, overlay
+- **Authenticode verification** — `signify` validates the signature chain/digest; flags self-signed / hash-mismatch / expired / abused certs
+- **Packer & compiler ID** — Detect-It-Easy
+- **Capability mapping** — capa (ATT&CK / MBC techniques)
+- **Config / C2 extraction** — configextractor-py (CAPE + RAT-king parser packs) rips embedded family configs
+- **Emulation unpacking** (`--unpack`) — Speakeasy carves packed payloads in memory and re-runs the binary tools on the recovered body
+- **Managed .NET deobfuscation** — de4dot strips protectors, then re-runs the tools on the clean assembly
+- **Deep RE** (`--deep`) — Ghidra headless decompilation of decrypt/loader/C2 routines
+- **Format-specific** — Office macros (olevba/oleid), PDF active content (pdfid/pdf-parser), LNK targets, archives + disk images (recursive), email
+- **Script deobfuscation** — recursive base64/hex/charcode/%-escape/gzip layer-peeling, carving embedded payloads
+- **HTML/SVG smuggling** — decodes embedded data:/atob/base64 blobs and carves the reconstructed payload
+- **YARA** — local rules on every type
+- **IP & domain reputation** — AbuseIPDB, ThreatFox, URLhaus, VT-domain
+- **Provenance** — tool versions + rule-set commit dates stamped into every report
+
+Extracted children (e.g. a doc or PE inside an archive/disk image) are auto-analyzed
+by the full pipeline into `children/<name>/`, recursively.
+
+---
+
 ## What's in this repo (and what isn't)
 
 This repo contains **only Sharingan's own source**: `triage.sh`, the helper tools
@@ -31,6 +60,7 @@ docs. The following are **deliberately not committed** and must be set up locall
 | `rules/` | Large third-party rule sets | Clone (step 2) |
 | `tools/pestats/` | Third-party PE-stats tool | Clone (step 3) |
 | `tools/venv/` | Per-analyst Python venv | `tools/setup-env.sh` (step 4) |
+| `tools/de4dot/` | Per-analyst de4dot build (.NET deob) | `tools/install-dotnet-deob.sh` (step 6) |
 
 ---
 
@@ -78,12 +108,18 @@ git -C /tmp/capa-src sparse-checkout set sigs && cp -r /tmp/capa-src/sigs rules/
 git clone https://github.com/as0ni/pestats.git tools/pestats
 
 # 4. Build the per-analyst Python venv
-#    (oletools / LnkParse3 / extract_msg / Speakeasy / configextractor-py + parser packs)
+#    (oletools / LnkParse3 / extract_msg / Speakeasy / signify / configextractor-py + parser packs)
 bash tools/setup-env.sh
 
 # 5. (Optional) Install Ghidra for the --deep decompilation stage
 sudo bash tools/ghidra/install-ghidra.sh
+
+# 6. (Optional) Install de4dot for the managed .NET deobfuscation stage (needs mono)
+sudo bash tools/install-dotnet-deob.sh
 ```
+
+> Steps 5–6 are optional: without them the `--deep` (Ghidra) and .NET-deob stages
+> are skipped and recorded as a gap, not silently — every other stage still runs.
 
 > **Note on YARA rules:** `Yara-Rules/rules` is no longer maintained upstream.
 > It still matches usefully but its signature base is dated — weight a "no YARA
