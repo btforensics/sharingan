@@ -2,6 +2,8 @@
 
 > *See through the disguise.* AI-assisted, file-type-agnostic malware triage for IR/DFIR analysts.
 
+**Developed by Buddy Tancio.**
+
 Sharingan runs a battery of static analysis tools over a sample (`triage.sh`),
 then an AI analyst (the `/analyze-sample` Claude Code skill) reasons across **all**
 the artifacts at once to produce a prioritized, evidence-cited triage report.
@@ -118,3 +120,14 @@ which to analyze.
 These are live-malware artifacts. Keep `samples/` and `reports/` local, never push
 them, and defang live indicators (`hxxp://`, `1.2.3[.]4`, `evil[.]com`) in any
 report you share. See `CLAUDE.md` for the full handling rules the AI analyst follows.
+
+---
+
+## Author & Credits
+
+Designed and developed by **Buddy Tancio**.
+
+Built with AI-assisted development using Claude Code. Sharingan orchestrates a number of
+excellent third-party tools — capa & FLOSS (Mandiant FLARE), Detect-It-Easy, YARA,
+oletools, Speakeasy, configextractor-py, Ghidra, and the capa-rules / signature-base
+rule sets — each under its own license.
