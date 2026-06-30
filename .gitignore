@@ -33,6 +33,12 @@ tools/de4dot/
 tools/de4dot-src/
 
 # ─────────────────────────────────────────────────────────────────────────
+#  Local-only dev docs — kept on disk, intentionally NOT distributed
+# ─────────────────────────────────────────────────────────────────────────
+build-roadmap.html
+testing-checklist.html
+
+# ─────────────────────────────────────────────────────────────────────────
 #  Python / editor / local Claude Code cruft
 # ─────────────────────────────────────────────────────────────────────────
 __pycache__/
