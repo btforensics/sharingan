@@ -27,15 +27,79 @@ deliverable, the `.md` is its source.
 > (`triage.sh` + floss/capa/die/yara/radare2) is Linux-only**; on Windows, work from an
 > existing `reports/<name>_<timestamp>/` dir produced on a Linux box.
 
+## 0. Execution & messaging conventions (apply throughout)
+
+**Open every run with the Sharingan banner.** Before anything else — and regardless of
+whether you're running `triage.sh` (raw sample) or analyzing an existing report dir — emit
+the banner below as the **first thing** in your reply, in a fenced code block so the eyes
+render verbatim. `triage.sh` prints this to a TTY, but the skill runs it through the Bash
+tool (no TTY, output collapsed) and the report-dir path never runs `triage.sh` at all, so
+the banner only reliably reaches the user if the skill prints it:
+
+```
+     .-=======-.              .-=======-.
+    /     ,     \            /     ,     \
+   |    \   /    |          |    \   /    |
+   |  -- (O) --  |          |  -- (O) --  |
+   |    /   \    |          |    /   \    |
+    \  '     '  /            \  '     '  /
+     '-=======-'              '-=======-'
+        S H A R I N G A N   — see through the disguise
+```
+
+**Run commands the static analyzer can parse — this avoids needless approval prompts.**
+The harness prompts on commands it can't statically verify even when an allow-rule exists.
+So, for every shell command in this flow:
+- **Do not use `cd`.** Run tools as **bare, non-compound commands from the project root** (the
+  default working directory) using their existing relative invocation — e.g. `./triage.sh <sample>`
+  and `python3 .claude/skills/analyze-sample/mine_artifacts.py <report-dir>`. These match the
+  project's allow-rules *and* parse cleanly. Keep paths relative (portable; the tool is
+  team-distributed). `cd` + redirection always prompts.
+- **Invoke `triage.sh` as `./triage.sh <sample>` — relative and bare, NEVER an absolute path.**
+  The allow-rule is `Bash(./triage.sh:*)`; `/home/.../triage.sh <sample>` does NOT match it and
+  prompts every time. Pass the sample path as the argument (it may be absolute); the script itself
+  stays `./triage.sh`. Accepting an absolute-path allow-rule would also hard-code a non-portable
+  path into a team-distributed tool — don't.
+- **To read report artifacts, use the Read tool (allowed via `Read(reports/**)`) or
+  `mine_artifacts.py` — NEVER a `cd`+`cat` compound.** A command like
+  `cd reports/<dir>; cat yara.txt; cat behavior.json …` trips the static-analysis guard (compound
+  `cd` + redirection) and prompts *regardless of the `Bash(cat:*)` allow-rule*. Read each artifact
+  by absolute/relative path with the Read tool, or mine them all at once with `mine_artifacts.py`.
+- **Do not use inline Python heredocs (`python3 - <<'PY'`) to mine artifacts.** Use the bundled
+  **`mine_artifacts.py`** helper (step 2) — one analyzable command instead of many that prompt.
+- **One purpose per command; avoid `VAR="…"; $VAR`, `$(…)` substitution, and brace/quote tricks**
+  inside a command — those are exactly the patterns that trip the guard. Prefer plain
+  `tool <absolute-arg>` forms (which match the project's allow-rules).
+- Let background runs write to their own captured output; don't wrap them in `> /tmp/log` redirects.
+
+**Progress + completion messaging (so the user always knows whether to wait).**
+- **Narrate each stage in plain language as it happens**, especially for archives, e.g.:
+  `Detected <file> as a password-protected archive` → `Extracting with default password 'infected'`
+  → `Extracted <child> (PE/exe) — analyzing it now`. Keep it to short status lines.
+- **Before any slow stage (triage.sh, floss/capa, paced VT, an unpack), say it will take a few
+  minutes and that you'll report when it's done** — then actually wait for it.
+- **Avoid ambiguous "done"-sounding words** (e.g. "baked", "wrapped up") while work is still
+  running — they read as completion. If you're mid-process, say **"still processing — please wait."**
+- **End every analysis with a single, unmistakable completion banner** including the path:
+  `✅ ANALYSIS COMPLETE — HTML report: <absolute path to analysis_report.html>`
+  (only emit this once the `.html` actually exists from step 5).
+
 ## 1. Resolve the target — sample vs. report dir
 
 Look at the argument and decide which case you're in:
 
 - **Raw sample** (path to a file, typically under `samples/`, that is NOT a report dir):
-  run triage first to generate artifacts —
-  `./triage.sh <sample-path>` — from the project root. This is **slow** (floss + capa take
-  minutes) and makes **external API calls** (VirusTotal / MalwareBazaar / AbuseIPDB) using
-  keys in `config.env`; tell the user before starting. triage.sh creates
+  run triage first to generate artifacts — invoke it as a **bare command from the project root**
+  (no `cd`, no compound/redirect): `./triage.sh <sample-path>`. It makes **external API calls**
+  (VirusTotal / MalwareBazaar / AbuseIPDB) using keys in `config.env`.
+  **Run it in the FOREGROUND** (do NOT use `run_in_background`) so Claude Code's native progress
+  indicator — the live spinner with **elapsed time + token counter** — is shown for the whole run.
+  triage.sh is now time-bounded: the heavy stages (floss/capa) are gated on virtualizing
+  protectors and capped by `FLOSS_TIMEOUT`/`CAPA_TIMEOUT` (config.env), so a worst-case run is a
+  few minutes, not tens of minutes — short enough to foreground. **Tell the user it'll take a
+  couple of minutes and that the timer is live**, then run it and wait. (Only fall back to a
+  background run + a Monitor heartbeat if you must do other work meanwhile; the native
+  spinner does not render for background tasks.) triage.sh creates
   `reports/<sample-name>_<timestamp>/`; use that new directory as the target.
   **Linux-only** — on Windows there is no triage to run, so fall back to the existing-report-dir
   case (tell the user collection must be done on a Linux box).
@@ -44,15 +108,20 @@ Look at the argument and decide which case you're in:
 - **Existing report dir** (a `reports/*` path, or a sample-name substring matching one):
   skip triage; pick the most recent matching directory. **This is the primary path on Windows.**
 - **No argument / blank** (the skill was invoked with no sample path or report dir):
-  **do not guess and do not auto-pick.** List the contents of `samples/` and show them to the
-  user, then ask literally: **"Which sample do you want to analyze?"** Wait for the user to
-  type a sample name, then resolve that name against `samples/` (raw sample → triage, Linux
-  only) or `reports/` (existing artifacts) per the cases above and proceed. If `samples/` is
-  empty or missing, list `reports/` instead and offer those; if both are empty, ask for a path.
+  **do not guess and do not auto-pick.** List `samples/` **sorted by modification date, newest
+  first**, and **show only the 10 most recent** (note how many are hidden if there are more), then
+  ask literally: **"Which sample do you want to analyze?"** Wait for the user to type a sample
+  name, then resolve that name against `samples/` (raw sample → triage, Linux only) or `reports/`
+  (existing artifacts) per the cases above and proceed. If `samples/` is empty or missing, list
+  `reports/` instead (same newest-first, last-10 rule) and offer those; if both are empty, ask for
+  a path.
 
-  Use the directory listing for the host OS (PowerShell `Get-ChildItem samples`, or
-  POSIX `ls -la samples/`), or just the Glob/Read tools — do not assume `ls` flags exist on
-  Windows.
+  Use the date-sorted, capped listing for the host OS — do **not** use a name-sorted default:
+  - POSIX: `ls -lt samples/ | head -n 11`  (mtime-descending; `head` keeps the newest 10 + the
+    `total` line)
+  - Windows PowerShell: `Get-ChildItem samples | Sort-Object LastWriteTime -Descending | Select-Object -First 10`
+  - or the Glob tool sorted by mtime.
+  Present the date (and size) next to each name so the user can tell fresh drops from old ones.
 
 State which case you detected and which directory you chose before proceeding.
 
@@ -103,10 +172,32 @@ artifacts — it is to *account for every artifact* while only pulling the analy
 fields of the large ones into context. "Read all artifacts" means **cover** all of them, **mine**
 the big ones; it does **not** mean `Read` every raw byte.
 
-**Size-aware ingestion (do this before bulk-reading):**
+**Start with the bundled digest helper (one analyzable command — no heredocs):**
+Run `python <skill-dir>/mine_artifacts.py <report-dir>` (use `python3`/`py` per host). It reads
+**every** artifact and prints a compact, size-aware digest — the PE must-check fields
+(`is_dll`/`exports`/`version_info`/`checksum_mismatch`/sections+entropy/overlay/imports/tls),
+authenticode verdict, capa rule names + ATT&CK, floss decoded strings + filtered URLs/IPs/registry/
+paths, YARA rules, VT stats + threat label + engine picks, vt_pivot siblings (with the
+imphash-groups-by-packer caveat when `die` saw a packer), behaviour status, config status,
+domain_rep, optional unpacked/ghidra, and the provenance footer. This replaces the ad-hoc inline
+Python and gives systematic coverage. **It is evidence, not a verdict** — still reason across it per
+CLAUDE.md, and `Read` any specific artifact in full when you need detail the digest summarized. For
+**archive/non-PE** samples also mine the type-specific artifacts (olevba/oleid/pdfid/lnk/email/
+archive) it doesn't yet cover, per the guidance below.
+
+**Size-aware ingestion (if you read artifacts directly beyond the digest):**
 - First **list the dir with sizes** (`ls -la <report-dir>` / Glob + stat). `Read` small artifacts
-  (≲ ~50 KB: `fileinfo.json`, `peinfo.json`, `die`, `yara.txt`, `lnk.json`, `oleid.txt`,
-  `pdfid.txt`, `provenance.json`, `domain_rep.json`, most `virustotal.json`) **in full**.
+  (≲ ~50 KB: `fileinfo.json`, `peinfo.json`, `authenticode.json`, `die`, `yara.txt`, `lnk.json`,
+  `oleid.txt`, `pdfid.txt`, `provenance.json`, `domain_rep.json`, most `virustotal.json`) **in full**.
+- **PE must-check fields (`peinfo.json`): reading it "in full" is not enough — explicitly account
+  for these every time**, because they are easy to skip yet decisive: `headers.is_dll`/`is_exe`
+  (does the PE *type* match what it claims to be?), `exports` (a real signed library exports many
+  functions; **`exports: []` on a file claiming to be a DLL is a hard masquerade tell**),
+  `version_info` (forged vendor strings = effortful masquerade; *random/garbage* strings = an
+  automated packer — and junk `FileVersion`/`ProductVersion` are where bogus "IP-like" FLOSS hits
+  often come from), `headers.checksum_mismatch`, `tls` callbacks, the import table, and the
+  `overlay`. On a **suspected masquerade**, diff these against the impersonated product
+  (type, exports, signer, version block) rather than relying on filename/extension alone.
 - For any artifact **larger than ~50–100 KB**, do **not** `Read` it raw — **mine it with Python**
   (or `jq`) for just the fields you need, printing a compact extract:
   - **`floss.json`** — `decoded_strings`, plus `static_strings` filtered for URLs, IPs, domains,
@@ -117,10 +208,12 @@ the big ones; it does **not** mean `Read` every raw byte.
     location trees, which are the bulk of the bytes and rarely needed for triage.
   - **`strings.json`/`strings.txt`, `virustotal.json`, `vt_pivot.json`** — if large, grep/parse
     for the indicators and verdict fields rather than reading end to end.
-- **Archive / recursive reports:** do **not** load every child's artifacts at once. Read
-  `archive.json` for the listing, then **recurse into suspicious children one at a time**,
-  applying this same size-aware reading per child. A large multi-child report is processed
-  child-by-child, not all-in-context.
+- **Archive / recursive reports:** `triage.sh` now **auto-analyzes each typed extracted child
+  with the full pipeline into `children/<name>/`** under the report dir (depth-capped), so the
+  archive's real payload is already triaged — `mine_artifacts.py <report-dir>/children/<name>`
+  and read it as a first-class report. Do **not** load every child at once; process them **one at
+  a time**, size-aware. Read `archive.json` for the listing/types. Only re-run `triage.sh` on a
+  child by hand for an **older report collected before auto-recursion** (no `children/` dir).
 - If you ever approach the context limit mid-triage (watch the **ctx** field in the status line),
   finish mining what's open and **summarize findings to free headroom** before opening more —
   never silently drop an artifact; note any you deferred.
@@ -152,9 +245,11 @@ their password (host-appropriate launcher):
 SHARINGAN_ARCHIVE_PWD='<password>' python <tools>/nonpe.py <archive-path> archive <report-dir>
 ```
 
-That regenerates `archive.json` + `extracted/`. Then **report the list of extracted files with
-their `category`/`subtype`**, and recurse your analysis into the suspicious children (re-run the
-relevant stages or `/analyze-sample` on an extracted PE/doc/script as needed). Never ask for the
+That regenerates `archive.json` + `extracted/`. Note this runs `nonpe.py` alone, so it does **not**
+auto-recurse into the children (only a full `triage.sh` run does). **Report the extracted files
+with their `category`/`subtype`**, then either re-run `triage.sh` on the archive to get the
+auto-recursed `children/<name>/` reports, or recurse manually on a suspicious child as needed.
+Never ask for the
 password before the defaults have been tried — the handler already does that.
 
 Account for every `*.json` and `*.txt` in the directory — small ones read in full, large ones
@@ -180,10 +275,32 @@ table; **`reverse`** + the flattened **`siblings`** list = *other* samples shari
 carries its `sha256`, `via` (which pivot surfaced it), AV `malicious/total`, and
 `suggested_threat_label` — mine these for **family attribution** (a consistent label across
 siblings is strong evidence) and list them under Recommended Next Steps as samples to triage.
-Treat siblings as *leads*, not confirmed family until corroborated. Critically, an `error`
+Treat siblings as *leads*, not confirmed family until corroborated. **imphash caveat: when `die`
+reports a packer/protector, the imphash is the *stub's* import hash, so `imphash_search` groups by
+PACKER, not family** — expect siblings with divergent `suggested_threat_label`s (e.g. a `.NET
+Reactor` imphash will pull unrelated families that merely share the packer). Trust same-label
+imphash siblings as campaign leads; downgrade divergent-label ones to "same packer". Critically, an `error`
 containing `403`/`Forbidden` on a reverse pivot means the VT key tier **gated** that lookup, NOT
 that no siblings exist — say so rather than implying the family is small; `count: 0` with no
 error is a real empty result. `meta.calls_used`/`max_calls` record the rate-limit budget.
+
+`behavior.json` (when present) carries **VT behaviour ingestion** (roadmap N1) — runtime
+activity from sandbox detonations VT *already* ran (nothing is uploaded). This is the pipeline's
+one source of **confirmed-observed** behaviour: unlike the embedded-only stages
+(`config.json`/`unpacked/`/`peinfo`), these indicators were seen at runtime, so they promote a
+contacted host or dropped hash from "High *intent*" to **"confirmed live (per VT, `<analysis_date>`)"**
+— exactly the IR/MDR question the static stages can't answer. Read `meta.status` FIRST, it decides
+everything: **`found`** = a dynamic sandbox ran it, mine `network` (`dns_lookups`/`ip_traffic`/`http`/
+`tls`/`memory_iocs`) and `host` (`files_dropped` *with child hashes*, `registry_set`, `mutexes_created`,
+`processes_created`, `command_executions`, `services_created`) and `verdict` (`attack_techniques`,
+`sandbox_signatures`, `ids_alerts`); **`static_only`** = VT has only a STATIC report (e.g.
+`sandbox_name: CAPA`, `has_network:false`) so NO dynamic data exists — a **GAP**, escalate to an own
+sandbox (#1), never read it as "did nothing" (this is the `av45i` case — pre-2007 worm won't run in
+modern sandboxes); **`not_detonated`** = VT has no behaviour report at all (GAP); **`unavailable`** =
+no VT key (GAP). Feed the resolved IPs (under `dns_lookups[].resolved_ips`) and `files_dropped[].sha256`
+**back into the IP-rep + VT-pivot stages** — these are fresh pivots the static stages never had. Tag
+findings `[behavior]`; the values are observed by *VT* at a past date, not by you (note staleness).
+`meta.truncated` records any activity list capped at the per-list limit.
 
 If `ghidra.json` is present (produced only by `triage.sh --deep`), it carries the Ghidra
 headless export: program metadata, full `functions` inventory, `imports`, defined `strings`,
@@ -257,8 +374,18 @@ flag mislabels (e.g. a file named "Ransomware" that is actually a worm).
 
 Write the full analysis to `<report-dir>/analysis_report.md` using the CLAUDE.md output
 format: Executive Summary, Threat Assessment, Hypothesis List, IOC Table, ATT&CK TTP List,
-Recommended Next Steps. Add a "Reverse Engineering Findings" section if step 3 ran. Then give
-the user a short summary in chat and the path to the saved report.
+**Trend Vision One — Search App hunting queries**, Recommended Next Steps. Add a "Reverse
+Engineering Findings" section if step 3 ran. Then give the user a short summary in chat and the
+path to the saved report, ending with the §0 completion banner (`✅ ANALYSIS COMPLETE — HTML
+report: <path>`).
+
+**Vision One query block (per the CLAUDE.md output spec).** Derive it from the IOC table:
+OR-join the file hashes under `objectFileHashSha256`, add `processFilePath`/`processName`
+queries for any install paths/patterns, and `dst`/`hostName`/`request` for recovered network
+C2. Use real values (a query field isn't a clickable link; defang only a full URL's scheme).
+Mark the field names as a template to validate against the analyst's tenant schema, and if no
+network IOCs were recovered, emit only the hash/path queries with a note that network ones
+populate after unpack/detonation.
 
 **Provenance footer (required when `provenance.json` exists).** End the report with a
 "Tooling & Rule Provenance" section so findings are reproducible / audit-grade: a small table of
@@ -291,11 +418,30 @@ from a recognized family; embedded indicators, High intent not confirmed-live; f
 domain/IP-rep + VT-pivot) · `[capa]` · `[VT]` (AV-engine
 consensus) · `[VT-YARA]` (crowdsourced YARA on VT) · `[VT-domain]` (VirusTotal domain report) ·
 `[VT-pivot]` (VirusTotal pivoting: contacted/dropped relationships + imphash/communicating-file
-siblings) · `[ThreatFox]` / `[URLhaus]` (abuse.ch domain/C2 reputation) · `[AbuseIPDB]` (IP reputation) ·
+siblings) · `[behavior]` (VT behaviour ingestion: runtime activity OBSERVED in VT's sandbox —
+network/dropped/registry/mutexes/processes; **confirmed-observed per VT at the analysis date**,
+unlike the embedded-only `[config]`/`[unpack]` tags — promote to "confirmed live (per VT, <date>)",
+not just intent; `static_only`/`not_detonated` status = a GAP, escalate to a sandbox) ·
+`[ThreatFox]` / `[URLhaus]` (abuse.ch domain/C2 reputation) · `[AbuseIPDB]` (IP reputation) ·
 `[YARA]` (local rules) · `[die]` · `[peinfo]` (PE structure: sections, entropy, overlay) ·
+`[authenticode]` (signify signature VERIFICATION, PE/.NET — `authenticode.json`: chain+digest
+verified against the MS trust store, validity window, `self_signed`/`hash_mismatch`/`expired`/
+`weak_digest` flags, stolen/abused-cert correlation. EMBEDDED evidence: `valid` from a known vendor
+leans benign but is NOT "confirmed clean" — stolen-cert + trojanized-legit are signed too;
+`hash_mismatch`/`invalid` is a High finding; `unavailable` = signify missing, a GAP not "unsigned";
+revocation is NOT checked offline) ·
+`[dotnet_deob]` (N7 managed .NET deob, PE/.NET — `dotnet_deob.json` + `deobfuscated/`: de4dot strips
+a detected protector, capa/config/strings re-run on the clean assembly. `deobfuscated` = trust the
+re-run hits; `no_protector` = .NET but already-clean IL; `unavailable` = de4dot/mono missing, a GAP
+not "clean"; `error` = unstrippable variant → escalate. EMBEDDED intent only) ·
 `[fileinfo]` (file-type ID / masquerade) · `[olevba]` / `[oleid]` (Office macro & IOC) ·
 `[pdfid]` / `[pdf-parser]` (PDF structure & active content) · `[lnk]` (shortcut target/args) ·
-`[email]` (mail headers/URLs/attachments) · `[archive]` (container listing + extracted children) ·
+`[email]` (mail headers/URLs/attachments) · `[archive]` (container listing + extracted children;
+ISO/UDF/VHD/VHDX/IMG delivery images route here too, recursion capped) ·
+`[scriptscan]` (N8 script deobfuscation — `scriptscan.json` + `script_layers/`: recursive base64/hex/
+charcode/%-escape/gzip layer-peeling, defanged per-layer IOCs, carved PE/ZIP. EMBEDDED intent) ·
+`[htmlsmuggle]` (N9 HTML/SVG smuggling — `htmlsmuggle.json` + `html_payloads/`: reassembly-primitive
+fingerprint, decoded data:/atob/base64 blobs, carved payload. `smuggling_suspected` flag. EMBEDDED intent) ·
 `[strings]` (universal strings.txt/json, non-PE). Never tag a runtime-resolved API as
 `[peinfo-import]` — verify against the actual import table first.
 

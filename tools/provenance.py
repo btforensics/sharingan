@@ -141,6 +141,23 @@ def venv_pkg_version(package):
         return {"error": f"{type(e).__name__}: {e}"}
 
 
+def de4dot_provenance():
+    """Stamp the N7 .NET-deob dependency. de4dot has no clean --version, so record
+    mono's version + whether de4dot is resolvable (PATH or tools/de4dot/de4dot.exe)."""
+    import shutil
+    mono = tool_version("mono", ["mono", "--version"],
+                        r"version ([0-9][\w.\-]*)")
+    local = os.path.join(BASE, "tools", "de4dot", "de4dot.exe")
+    on_path = bool(shutil.which("de4dot"))
+    return {
+        "de4dot_present": on_path or os.path.exists(local),
+        "de4dot_path": "PATH" if on_path else (local if os.path.exists(local) else None),
+        "mono": mono.get("version", mono.get("error")),
+        "note": "install via tools/install-dotnet-deob.sh" if not (
+            on_path or os.path.exists(local)) else None,
+    }
+
+
 def load_sample(report_dir):
     """Pull the sample identity from hashes.json so the stamp is bound to it."""
     try:
@@ -177,6 +194,24 @@ def main():
             "ghidra": ghidra_version(GHIDRA_HOME),
             "speakeasy": venv_pkg_version("speakeasy-emulator"),
             "configextractor": venv_pkg_version("configextractor-py"),
+            # N6 Authenticode verification — signify + its bundled MS trust store.
+            # mscerts is the trust-root snapshot, so its version dates the roots
+            # any "valid chain" verdict was checked against (audit-grade).
+            "signify": venv_pkg_version("signify"),
+            "mscerts": venv_pkg_version("mscerts"),
+            # N1 VT behaviour ingestion is stdlib-only (no installed package to
+            # version) — stamp the upstream data source / API it reads instead.
+            "vt_behavior": {"source": "VirusTotal API v3 /behaviour_summary",
+                            "note": "ingests VT's existing sandbox detonation; "
+                                    "no local engine version"},
+            # N7 managed .NET deob — de4dot via mono (optional system dep).
+            "dotnet_deob": de4dot_provenance(),
+            # N8/N9 script-deob + HTML-smuggling stages are stdlib-only Python
+            # (no installed package to version) — versioned with the project.
+            "scriptscan": {"engine": "scriptscan.py (stdlib)", "note": "N8 — "
+                           "recursive script deobfuscation"},
+            "htmlsmuggle": {"engine": "htmlsmuggle.py (stdlib)", "note": "N9 — "
+                            "HTML/SVG smuggling extraction"},
             "python": {"version": platform.python_version(),
                        "raw": sys.version.split()[0]},
         },

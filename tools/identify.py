@@ -25,15 +25,18 @@ EXT_CATEGORY = {
     ".docx": "office_ooxml", ".docm": "office_ooxml", ".xlsx": "office_ooxml",
     ".xlsm": "office_ooxml", ".pptx": "office_ooxml", ".pptm": "office_ooxml",
     ".pdf": "pdf", ".lnk": "lnk",
+    ".html": "html", ".htm": "html", ".xhtml": "html", ".svg": "html",
     ".ps1": "script", ".psm1": "script", ".vbs": "script", ".vbe": "script",
     ".js": "script", ".jse": "script", ".hta": "script", ".wsf": "script",
     ".bat": "script", ".cmd": "script", ".sh": "script", ".py": "script", ".pl": "script",
     ".zip": "archive", ".rar": "archive", ".7z": "archive", ".gz": "archive",
     ".tar": "archive", ".cab": "archive", ".iso": "archive", ".img": "archive", ".jar": "archive",
+    ".vhd": "archive", ".vhdx": "archive", ".udf": "archive",
     ".eml": "email", ".msg": "email",
 }
 
 SCRIPT_EXTS = {".ps1",".psm1",".vbs",".vbe",".js",".jse",".hta",".wsf",".bat",".cmd",".sh",".py",".pl"}
+HTML_EXTS = {".html",".htm",".xhtml",".svg"}
 
 # ── analysis stages each category should trigger (consumed by triage.sh) ──
 STAGES = {
@@ -44,6 +47,7 @@ STAGES = {
     "office_ooxml": ["olevba", "oleid", "yara"],
     "pdf":          ["pdfid", "pdfparser", "yara"],
     "lnk":          ["lnk", "yara"],
+    "html":         ["htmlsmuggle", "yara"],
     "script":       ["scriptscan", "yara"],
     "archive":      ["archive", "yara"],
     "email":        ["email", "yara"],
@@ -117,6 +121,37 @@ def sniff_ole(path):
         return "office_ole", "ole"
 
 
+def sniff_diskimage(path, ext):
+    """Disk/optical images used as MOTW-bypass delivery containers (ISO/UDF/VHD/
+    VHDX/raw IMG). Their magic lives at fixed offsets, not byte 0: ISO9660 'CD001'
+    @32769, UDF 'BEA01' @32768, VHD 'conectix' footer @EOF-512, VHDX 'vhdxfile' @0.
+    All are handled by 7z, so they route to the archive handler. Returns
+    (category, subtype) or None."""
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as f:
+            if f.read(8) == b"vhdxfile":
+                return ("archive", "vhdx")
+            if size > 32774:
+                f.seek(32769)
+                if f.read(5) == b"CD001":
+                    return ("archive", "iso")
+            if size > 32773:
+                f.seek(32768)
+                if f.read(5) == b"BEA01":
+                    return ("archive", "udf")
+            if size >= 512:
+                f.seek(size - 512)
+                if f.read(8) == b"conectix":
+                    return ("archive", "vhd")
+    except Exception:
+        pass
+    # fall back to extension for images whose signature we didn't positively hit
+    if ext in (".iso", ".img", ".vhd", ".vhdx", ".udf"):
+        return ("archive", ext.lstrip("."))
+    return None
+
+
 def classify(path):
     with open(path, "rb") as f:
         head = f.read(16)
@@ -148,6 +183,8 @@ def classify(path):
         category, subtype = "archive", "gzip"
     elif head[:4] == b"MSCF":
         category, subtype = "archive", "cab"
+    elif sniff_diskimage(path, ext):
+        category, subtype = sniff_diskimage(path, ext)
     else:
         # ---- text / script: no binary magic ----
         try:
@@ -160,6 +197,9 @@ def classify(path):
         if ext == ".eml" or low.startswith(b"received:") or low.startswith(b"from ") \
                 or b"\nmime-version:" in low:
             category, subtype = "email", "eml"
+        elif is_text and ext not in SCRIPT_EXTS and (ext in HTML_EXTS
+                or b"<!doctype html" in low or b"<html" in low or b"<svg" in low):
+            category, subtype = "html", ("svg" if (ext == ".svg" or b"<svg" in low) else "html")
         elif is_text and (ext in SCRIPT_EXTS or any(k in low for k in (
                 b"powershell", b"function ", b"createobject", b"wscript",
                 b"<script", b"#!/bin", b"import ", b"eval("))):

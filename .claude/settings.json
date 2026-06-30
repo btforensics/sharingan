@@ -9,6 +9,7 @@
     "allow": [
       "Bash(./triage.sh:*)",
       "Bash(python3:*)",
+      "Bash(mv:*)",
       "Bash(tools/venv/bin/python:*)",
       "Bash(tools/venv/bin/pip:*)",
       "Bash(tools/venv/bin/olevba:*)",

@@ -67,17 +67,17 @@
 
   <header class="top">
     <h1>Sharingan — Build Roadmap</h1>
-    <div class="sub">Prioritized capability gaps · scored by build value · 2026-06-26 · last verified against the toolchain 2026-06-28 · analyst: Buddy Tancio</div>
+    <div class="sub">Prioritized capability gaps · scored by build value · 2026-06-26 · last verified against the toolchain 2026-06-29 (N7 .NET-deob + file-type breadth shipped) · analyst: Buddy Tancio</div>
     <div class="scorewrap">
       <div>
-        <div class="bigscore">87.5<small>/100</small></div>
+        <div class="bigscore">93.5<small>/100</small></div>
         <div class="sub">current tool score (full malware analysis)</div>
       </div>
       <div class="traj">
         <div style="font-size:13px;opacity:.9">Trajectory</div>
-        <div class="bar"><i style="width:87.5%"></i></div>
+        <div class="bar"><i style="width:93.5%"></i></div>
         <div class="marks">
-          <span>58 start</span><span>81.5 multi-format ✓</span><span>84.5 emu-unpack ✓</span><span>87.5 config-extract ✓</span><span>~91 sandbox</span>
+          <span>58 start</span><span>87.5 config-extract ✓</span><span>89.5 VT-behaviour ✓</span><span>90.5 authenticode ✓</span><span>92.5 .NET-deob ✓</span><span>93.5 breadth ✓</span><span>~94 sandbox</span>
         </div>
       </div>
     </div>
@@ -86,9 +86,30 @@
   <div class="note">
     <b>How the per-item score works.</b> Each item gets a <b>Build Priority Score (0–100)</b> = a blend of
     <i>analysis impact</i>, <i>cost-efficiency</i> (cheaper scores higher), and whether it <i>unblocks</i> other
-    work. The <span class="chip delta">+Δ</span> chip is the estimated lift to the overall <b>87.5/100</b> tool score
+    work. The <span class="chip delta">+Δ</span> chip is the estimated lift to the overall <b>93.5/100</b> tool score
     once built. Impact stars (★) rate analytical value independent of cost. Scores are an analyst's judgment call,
     not a measurement — they're meant to drive sequencing, not to be precise.
+  </div>
+
+  <div class="note">
+    <b>Gating &amp; speed rubric — every new stage must declare how it runs.</b>
+    Sharingan is breadth-agnostic <i>without</i> getting slow because nothing runs that the file type
+    doesn't need. The contract for any new analysis stage:
+    <ol style="margin:.5em 0 0 1.2em">
+      <li><b>Identify first.</b> <code>identify.py</code> classifies (magic + <code>file</code> + structural peek,
+        sub-second) and emits <code>category</code>/<code>subtype</code> + <code>recommended_stages</code>;
+        <code>triage.sh</code> routes only those. A sample only ever pays for <i>its own</i> type.</li>
+      <li><b>Cheap stages auto-run on type match.</b> Decoders, parsers, structural reads, Mach-O capa, etc.
+        run automatically when the category matches — they cost ~0 on every other type.</li>
+      <li><b>Expensive stages are opt-in or bounded.</b> Emulation, iterative script deobfuscation, disk-image
+        mount/carve, APK→DEX decompile follow the <code>--deep</code>/<code>--unpack</code> pattern: behind a flag,
+        or hard-capped. They must never bloat the common path.</li>
+      <li><b>Recursion is capped.</b> Any carve/extract stage (archive, ISO, OneNote, MSI, polyglot) bounds
+        recursion <i>depth</i>, child <i>count</i>, and <i>size</i>, and skips expensive stages on children.
+        Reuse the archive handler's limits.</li>
+    </ol>
+    Corollary (per the perf findings): routed CPU tools were never the bottleneck — VT rate-limit pacing
+    (PERF-1) and the AI phase are. So adding well-gated breadth barely moves run time.
   </div>
 
   <h2>Things to build (ranked by Build Priority Score)</h2>
@@ -131,7 +152,7 @@
           <span class="chip">Impact <span class="stars">★★★★</span></span>
           <span class="chip free">Cost: Free</span>
           <span class="chip delta">+4 Δ applied (70→74)</span>
-          <span class="chip">Still: sees loader stub only on packed input → pair with #4</span>
+          <span class="chip">Still: sees loader stub only on packed input → pair with N4/N7 unpacking</span>
         </div>
       </div>
       <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
@@ -160,23 +181,31 @@
       <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
     </div>
 
-    <!-- 4 -->
-    <div class="card">
-      <div class="rank"><span class="n">4</span>priority</div>
+    <!-- 4 — SUPERSEDED -->
+    <div class="card done">
+      <div class="rank"><span class="n">4</span>superseded</div>
       <div class="body">
-        <h3>Automated unpacking stage</h3>
-        <p>UPX is installed but never invoked, and there's no path for the real problem — the encrypted overlays.
-           capa/floss only ever see the loader stub. Add a scripted debugger-dump (or detonate-and-dump) stage,
-           then re-run floss/capa on the <i>actual worm body</i>.</p>
-        <p class="why">Depends on item 2 (Ghidra) and ideally item 1 (sandbox). High value once those exist.</p>
+        <h3>Automated unpacking stage <span class="ribbon">✓ SUPERSEDED by N4 + N7</span></h3>
+        <p>Originally one card for "get the real payload out of a packed/protected sample, then re-run
+           floss/capa on it." That capability now ships as two stages, so there's no standalone work left:
+           <b>N4 (Speakeasy)</b> emulates a native loader stub and carves the payload; <b>N7 (de4dot)</b>
+           strips a managed .NET protector and recovers the clean assembly. Both re-run the binary tools on
+           the recovered body automatically.</p>
+        <p class="why">What this card <i>cannot</i> ever deliver belongs elsewhere, not here:
+           the <b>anti-static residual</b> — remote-keyed payloads (decrypt key fetched from C2 at runtime),
+           full code-virtualization (Themida/VMProtect-class), and anti-emulation stubs (e.g. av45i bails
+           after 171 instrs) — <b>requires runtime execution → that's #1 (sandbox)</b>, and is already wired
+           to hand off with an honest GAP. Separately, <b>packed ELF</b> isn't covered (Speakeasy is Windows-PE
+           only) — tracked under the Linux-depth axis (a <code>upx -d</code> attempt + a Qiling/Unicorn ELF
+           path), not here.</p>
         <div class="meta">
           <span class="chip">Impact <span class="stars">★★★★</span></span>
-          <span class="chip">Cost: Med</span>
-          <span class="chip">Depends on #1/#2</span>
-          <span class="chip delta">+4 Δ</span>
+          <span class="chip free">Delivered: N4 (native) + N7 (.NET)</span>
+          <span class="chip">Residual → #1 sandbox · ELF → Linux-depth</span>
+          <span class="chip delta">+4 Δ realized via N4/N7</span>
         </div>
       </div>
-      <div class="scorebox s-mid"><div class="ring"><div class="num">78</div><div class="lbl">Build Score</div></div></div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Superseded</div></div></div>
     </div>
 
     <!-- 5 — SHIPPED -->
@@ -272,10 +301,10 @@
   <div class="note">
     Enumerated this session while the sandbox (#1) is parked. <b>Every item here is
     sandbox-free</b> — it runs on the existing Linux toolchain — and each attacks a
-    specific blind spot the current 13-stage pipeline leaves open. Scored on the same
-    Build Priority basis as the items above. N3, N4 and now N2 have shipped (headline
-    87.5); the <span class="chip delta">+Δ</span> on a remaining item is the estimated
-    lift when it ships.
+    specific blind spot the current pipeline leaves open. Scored on the same
+    Build Priority basis as the items above. N3, N4, N2, N1, N6, N7 and the file-type
+    breadth stages have shipped (headline 93.5); the <span class="chip delta">+Δ</span> on a
+    remaining item is the estimated lift when it ships.
     <br><br><b>Honest caveat:</b> these scores are <i>expected</i> value — improvement is
     <b>conditional on your samples</b>, not guaranteed. N1 was tested on
     <code>av45i.exe</code> and downgraded 88&rarr;68 when VT turned out to hold no dynamic
@@ -286,31 +315,42 @@
   </div>
   <div class="grid">
 
-    <!-- N1 -->
-    <div class="card">
-      <div class="rank"><span class="n">N1</span>candidate</div>
+    <!-- N1 — SHIPPED -->
+    <div class="card done">
+      <div class="rank"><span class="n">N1</span>shipped</div>
       <div class="body">
-        <h3>VirusTotal behavior ingestion — a free "sandbox" <i>when VT has one</i></h3>
-        <p>Pull VT's <i>existing</i> detonation report via the <code>/behaviours</code>
-           API: processes spawned, files &amp; registry written, network contacted,
-           mutexes, services created — <b>but only when a dynamic sandbox actually ran the
-           sample.</b> We send only the hash; nothing is uploaded.</p>
-        <p class="why" style="background:#fff6f5;border-left:3px solid var(--hot);padding:8px 10px;border-radius:6px">
-           <b>⚠ Verified 2026-06-28 on <code>av45i.exe</code> — and it came back near-empty.</b>
-           VT's only "behaviour" report for this sample is <code>sandbox_name: CAPA</code>
-           (static), <code>has_network:false</code>, <code>has_procs:false</code>. No dynamic
-           data exists — almost certainly because the worm targets <b>pre-2007 Windows</b>
-           and won't run in VT's modern sandboxes. So here it would only re-fetch capa output
-           Sharingan already produces. <b>Real value is conditional</b>: high for modern /
-           widely-detonated malware, ~null for old / niche / targeted samples.</p>
+        <h3>VirusTotal behaviour ingestion <span class="ribbon">✓ SHIPPED 2026-06-29</span></h3>
+        <p><b>Done.</b> New <code>tools/vt_behavior.py</code> (stdlib-only, paced like
+           <code>vt_pivot</code>) wired into <code>triage.sh</code> as a universal stage →
+           <code>behavior.json</code>. Pulls VT's <i>existing</i> detonation via
+           <code>/behaviours</code> + <code>/behaviour_summary</code> (hash only; nothing
+           uploaded) and flattens it: <b>network</b> (DNS / IP traffic / HTTP / TLS / memory-pattern
+           IOCs), <b>host</b> (files dropped <i>with child hashes</i>, registry, mutexes, processes,
+           commands, services) and <b>verdict</b> (MITRE techniques, sandbox signatures, Suricata IDS).
+           This is the pipeline's one source of <b>confirmed-OBSERVED</b> behaviour — it promotes the
+           embedded-only stages' "High <i>intent</i>" to <b>"confirmed live (per VT, &lt;date&gt;)"</b>,
+           the IR/MDR question static analysis can't answer. The cheap proxy for the own-sandbox
+           lever (#1) wherever a detonation already exists.</p>
+        <p class="why">Honest status is the whole point: <code>found</code> = real dynamic data;
+           <code>static_only</code> / <code>not_detonated</code> / <code>unavailable</code> = a
+           <b>GAP</b> (no VT detonation), explicitly handed off to #1 — never read as "did nothing".</p>
+        <p class="why" style="background:#f5fff6;border-left:3px solid #2ea043;padding:8px 10px;border-radius:6px">
+           <b>✓ Verified end-to-end 2026-06-29.</b> On the live <b>AsyncRAT</b> sample
+           (<code>7adeac…</code>) it returned <code>found</code> across 7 sandboxes and
+           <b>confirmed the AES-embedded C2 <code>hubscore[.]io</code> that N2 ripped was actually
+           contacted at runtime</b> (resolved to <code>104.21.94[.]206</code>/<code>172.67.139[.]209</code>,
+           ports 6789/7878/8443/8787) — plus mutex <code>A3M819MlGiuh</code> and 10 ATT&amp;CK
+           techniques. On <b><code>av45i.exe</code></b> it correctly degraded to
+           <code>static_only [CAPA]</code> — the predicted gap (pre-2007 worm VT can't detonate),
+           recorded as a GAP, not a clean result.</p>
         <div class="meta">
-          <span class="chip">Impact <span class="stars">★★★</span> (conditional)</span>
+          <span class="chip">Impact <span class="stars">★★★</span> (conditional on VT having a detonation)</span>
           <span class="chip free">Cost: Low</span>
           <span class="chip">Uses existing VT key</span>
-          <span class="chip delta">+2 Δ (modern samples only)</span>
+          <span class="chip delta">+2 Δ → 89.5</span>
         </div>
       </div>
-      <div class="scorebox s-mid"><div class="ring"><div class="num">68</div><div class="lbl">Build Score</div></div></div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
     </div>
 
     <!-- N2 — SHIPPED -->
@@ -434,25 +474,96 @@
       <div class="scorebox s-mid"><div class="ring"><div class="num">70</div><div class="lbl">Build Score</div></div></div>
     </div>
 
-    <!-- N6 -->
-    <div class="card">
-      <div class="rank"><span class="n">N6</span>candidate</div>
+    <!-- N7 -->
+    <div class="card done">
+      <div class="rank"><span class="n">N7</span>shipped</div>
       <div class="body">
-        <h3>Authenticode / digital-signature verification</h3>
-        <p>Beyond noting a signature exists (peinfo does that), actually <b>verify</b> it:
-           validate the cert chain, check validity/revocation, and surface the signer.
-           Flag invalid/expired/self-signed and known <b>stolen or abused</b> certificates.</p>
-        <p class="why">Signing status is a strong, cheap signal: signed-and-valid lowers
-           suspicion, while a stolen/abused or broken signature is itself a finding. We
-           already parse the signature blob — this adds the verdict the analyst actually needs.</p>
+        <h3>Managed .NET unpack / deobfuscation <span class="ribbon">✓ SHIPPED 2026-06-29</span></h3>
+        <p>For a <b>protected .NET</b> sample, strip the protector (<code>de4dot</code> /
+           <code>NETReactorSlayer</code>; ConfuserEx-class deobfuscators), then re-run
+           capa / config-extract / strings on the <b>recovered assembly</b> — the managed
+           analogue of how N4 re-runs the binary tools on a carved native body. Trigger when
+           <code>die</code> names a .NET protector or <code>fileinfo</code> subtype is <code>dotnet</code>.</p>
+        <p class="why">Fills a real gap surfaced live on the <b>DCRat</b> sample
+           (<code>libGLESv2.dll</code>, .NET&nbsp;Reactor) and earlier AsyncRAT: when a .NET payload is
+           <i>protected</i>, <b>N4 (native emulation) can't follow the CLR handoff and N2 (config
+           parsers) return <code>no_match</code></b>, so the whole managed payload is statically
+           invisible. .NET is a large share of commodity RATs (DCRat / AsyncRAT / Quasar / XWorm).
+           <b>Honest limit:</b> deobfuscation is per-protector and brittle — an unrecoverable sample
+           records a GAP and falls back to a sandbox (#1), exactly like N4; recovers EMBEDDED
+           indicators only (High <i>intent</i>, not confirmed-live). Ranked ahead of #6 (IOC export
+           is a downstream handoff, not analysis depth).</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★</span></span>
+          <span class="chip">Cost: Low-Med</span>
+          <span class="chip">Reaches protected .NET payloads</span>
+          <span class="chip delta">+2 Δ applied (90.5→92.5)</span>
+          <span class="chip">Verified end-to-end on DCRat/.NET Reactor (de4dot via dotnet SDK)</span>
+        </div>
+      </div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Built</div></div></div>
+    </div>
+
+    <!-- File-type breadth: N8 / N9 / disk-image carving -->
+    <div class="card done">
+      <div class="rank"><span class="n">+</span>shipped</div>
+      <div class="body">
+        <h3>File-type breadth — script deob · HTML/SVG smuggling · disk-image carving <span class="ribbon">✓ SHIPPED 2026-06-29</span></h3>
+        <p>The "analyze <i>any</i> file type" axis (breadth, distinct from per-type depth). Three classes
+           that previously fell through to strings-only are now routed to real stages, all under the
+           <b>gating &amp; speed rubric</b> (identify-first → cheap auto-on-match · expensive opt-in/bounded ·
+           recursion capped):</p>
+        <p class="why"><b>N8 script deobfuscation</b> (<code>scriptscan.py</code>, stdlib) — the dominant
+           dropper layer: recursively peels base64/hex/charcode/%-escape/gzip/<code>-EncodedCommand</code>
+           layers, re-extracts defanged IOCs per layer, carves embedded PE/ZIP. <b>N9 HTML/SVG smuggling</b>
+           (<code>htmlsmuggle.py</code>, stdlib) — fingerprints client-side reassembly (atob/Blob/<code>&lt;a
+           download&gt;</code>), decodes data:/atob/base64 blobs, carves the reconstructed payload.
+           <b>Disk-image delivery containers</b> — ISO/UDF/VHD/VHDX/IMG detected via offset-magic, carved
+           by 7z through the (now depth/count/size-capped) archive handler. All verified end-to-end;
+           EMBEDDED intent only.</p>
+        <div class="meta">
+          <span class="chip">Impact <span class="stars">★★★</span></span>
+          <span class="chip free">Cost: Free (stdlib + 7z)</span>
+          <span class="chip">Closes 3 "fell-through-to-strings" gaps</span>
+          <span class="chip delta">+1 Δ applied (92.5→93.5)</span>
+        </div>
+      </div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
+    </div>
+
+    <!-- N6 — SHIPPED -->
+    <div class="card done">
+      <div class="rank"><span class="n">N6</span>shipped</div>
+      <div class="body">
+        <h3>Authenticode / digital-signature verification <span class="ribbon">✓ SHIPPED 2026-06-29</span></h3>
+        <p><b>Done.</b> New <code>tools/authenticode.py</code> (signify, in the venv) wired into
+           <code>triage.sh</code> for PE/.NET → <code>authenticode.json</code>. Beyond noting a
+           signature <i>exists</i> (pestats), it <b>verifies</b> it: validates the cert chain +
+           digest against the bundled MS trust store, checks the validity window, and raises
+           flags — <code>self_signed</code>, <code>hash_mismatch</code> (tampered after signing),
+           <code>expired_at_analysis</code>, <code>weak_digest_md5/sha1</code> — plus an
+           <code>abused_cert</code>/<code>abused_cert_suspected</code> correlation against the
+           analyst-maintained <code>rules/abused_certs.json</code> (stolen/abused signing certs).</p>
+        <p class="why">A <b>bidirectional</b> signal: <code>valid</code> from a recognizable vendor
+           leans benign (rules benign <i>in</i>) — but EMBEDDED evidence only, so it never proves
+           "clean" (stolen-cert abuse and trojanized-legit binaries are signed-and-valid too;
+           <code>hash_mismatch</code> is the tell for the latter). <code>invalid</code> is itself a
+           finding. Honest gaps: revocation (OCSP/CRL) is <b>not</b> checked offline; signify absent
+           = <code>unavailable</code> (a GAP), never "not signed".</p>
+        <p class="why" style="background:#f5fff6;border-left:3px solid #2ea043;padding:8px 10px;border-radius:6px">
+           <b>✓ Verified end-to-end 2026-06-29.</b> On a dual-signed PuTTY <code>pscp.exe</code> →
+           <code>valid</code> (signer <i>Simon Tatham</i>, SHA-1+SHA-256, <code>weak_digest_sha1</code>
+           flagged). A single flipped byte → <code>invalid</code> + <code>hash_mismatch</code>.
+           <code>av45i.exe</code> → <code>not_signed</code>. Fixed a false-positive where bundled root
+           CAs (self-signed by design) tripped <code>self_signed</code> — now leaf-only.</p>
         <div class="meta">
           <span class="chip">Impact <span class="stars">★★</span></span>
           <span class="chip free">Cost: Low</span>
-          <span class="chip">Reuses parsed signature data</span>
-          <span class="chip delta">+1 Δ</span>
+          <span class="chip">signify + MS trust store</span>
+          <span class="chip delta">+1 Δ applied (89.5→90.5)</span>
         </div>
       </div>
-      <div class="scorebox s-mid"><div class="ring"><div class="num">64</div><div class="lbl">Build Score</div></div></div>
+      <div class="scorebox s-hi"><div class="ring"><div class="num">✓</div><div class="lbl">Shipped</div></div></div>
     </div>
 
   </div>
@@ -473,16 +584,25 @@
         families — indicators that are encrypted and invisible to strings/floss. Verified pulling
         a live AsyncRAT C2 that wasn't in the binary's plaintext. Runs on the original sample and
         on N4's recovered body, and the new IOCs feed back into the reputation + VT-pivot stages.</li>
+    <li><b>VT behaviour (N1) &amp; Authenticode (N6) — ✓ done 2026-06-29</b> (87.5→89.5→90.5):
+        N1 ingests VT's existing detonation (the one confirmed-observed source); N6 verifies the
+        signature chain and flags masquerade. N6 earned its keep live on the DCRat
+        <code>libGLESv2.dll</code> sample (unsigned file impersonating a signed Google library).</li>
+    <li><b>Then .NET unpack (N7) — recommended next, sandbox-free</b> (est. +2): the
+        DCRat/<code>libGLESv2.dll</code> triage showed protected .NET payloads are statically
+        invisible (N4 can't follow the CLR, N2 returns <code>no_match</code>). de4dot/NETReactorSlayer
+        recovers the managed assembly, then capa/config/strings re-run on it. Ranked ahead of #6
+        because IOC export is a downstream handoff, not analysis depth.</li>
     <li><b>Then the big one (#1 → ~91):</b> stand up an isolated sandbox. This is the only item that converts
         High-confidence hypotheses into confirmed behavior — there is no static-only substitute, and it is
-        exactly where N4's recorded gaps hand off.</li>
-    <li><b>Ops polish anytime (#5, #6, #7, N6):</b> detection-content generation (YARA+Sigma),
-        IOC export, sample diffing, and Authenticode verification slot in whenever convenient.</li>
+        exactly where N4's and N7's recorded gaps hand off.</li>
+    <li><b>Ops polish anytime (#5, #6, #7):</b> detection-content generation (YARA+Sigma),
+        IOC export, and sample diffing slot in whenever convenient. (Authenticode N6 ✓ shipped.)</li>
   </ol>
 
   <div class="note">
     <b>Honest ceiling.</b> The sandbox-free build-out (N2/N3/N4 + the enrichment items) has taken the tool
-    from 58 to <b>87.5</b> — further than the original note assumed static work could reach. But every gain
+    from 58 to <b>93.5</b> — further than the original note assumed static work could reach. But every gain
     so far is still about what the tool can <i>see statically</i>: extracted/embedded indicators at High
     <i>intent</i>. The last step — turning High-confidence behavioral hypotheses into <b>confirmed</b>
     behavior (live C2, dropped files, runtime-only payloads like av45i's) — has no static substitute and
@@ -490,7 +610,7 @@
   </div>
 
   <footer>
-    Sharingan · build roadmap · generated 2026-06-26 · last verified against the toolchain 2026-06-28 (no new stage since N4 emu-unpack) · scores are analyst judgment for sequencing, not measurements.
+    Sharingan · build roadmap · generated 2026-06-26 · last verified against the toolchain 2026-06-29 (N7 .NET-deob + N8 script-deob + N9 HTML-smuggling + disk-image carving shipped) · scores are analyst judgment for sequencing, not measurements.
   </footer>
 
 </div>

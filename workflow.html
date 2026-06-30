@@ -279,12 +279,13 @@
   <div class="masthead-inner">
     <p class="kicker">Sharingan · Malware-triage · Kali Linux · Claude Code</p>
     <h1>The <span class="em">Sharingan</span> Triage Workflow</h1>
-    <p class="lead">A static-analysis pipeline that fingerprints a Windows sample with nine
-      tools, then hands the artifacts to an analyst agent that reasons across all of them and
-      writes the report — start to finish in one command.</p>
+    <p class="lead">A static-analysis pipeline that fingerprints <em>any</em> file type — PE/.NET,
+      ELF, Office, PDF, scripts, HTML, archives, disk images, email — with two dozen tools, then
+      hands the artifacts to an analyst agent that reasons across all of them and writes the
+      report — start to finish in one command.</p>
     <div class="chips">
       <span class="chip"><b>1</b> command, end to end</span>
-      <span class="chip"><b>14</b>-stage pipeline + auto-escalated deep stages</span>
+      <span class="chip"><b>20</b>-stage pipeline + auto-escalated deep stages</span>
       <span class="chip"><b>static</b> only — never executed</span>
       <span class="chip">output: <b>analysis_report.html</b></span>
     </div>
@@ -317,6 +318,7 @@
       <a href="#setup">Setup</a>
       <a href="#resources">Resources &amp; limits</a>
       <a href="#pipeline">The stages</a>
+      <a href="#toolchain">Toolchain</a>
       <a href="#run">Ways to run it</a>
       <a href="#output">Reading the output</a>
       <a href="#deeper">Going deeper</a>
@@ -386,10 +388,12 @@
           <tr><td><code>CAPA_RULES</code></td><td>Path to the capa rules directory</td><td>capa</td></tr>
           <tr><td><code>YARA_RULES_DIR</code></td><td>Root holding <code>yara-rules/</code> &amp; <code>signature-base/</code></td><td>YARA</td></tr>
           <tr><td><code>PESTATS</code></td><td>Path to <code>pestats.py</code></td><td>PE structure</td></tr>
+          <tr><td><code>AUTHENTICODE</code></td><td>Path to <code>authenticode.py</code></td><td>Authenticode verification</td></tr>
           <tr><td><code>GHIDRA_HOME</code></td><td>Ghidra install dir (<code>/opt/ghidra</code>)</td><td>Deep RE (<code>--deep</code>)</td></tr>
           <tr><td><code>GHIDRA_SCRIPTS</code></td><td>Path holding <code>ExportGhidra.java</code></td><td>Deep RE (<code>--deep</code>)</td></tr>
           <tr><td><code>UNPACK</code></td><td>Path to <code>unpack_emulate.py</code></td><td>Emulation unpacking (<code>--unpack</code>)</td></tr>
           <tr><td><code>CONFIGEXT</code></td><td>Path to <code>config_extract.py</code></td><td>Config / C2 extraction</td></tr>
+          <tr><td><code>VTBEHAVIOR</code></td><td>Path to <code>vt_behavior.py</code></td><td>VT behaviour ingestion</td></tr>
         </tbody>
       </table>
     </div>
@@ -463,7 +467,7 @@
       <p>This is what <code>./triage.sh &lt;sample&gt;</code> executes. It is no longer a fixed
         line — a <strong>routing front door</strong> (stage 1) identifies the file type, then the
         <strong>universal stages</strong> run on every sample while the <strong>format-routed
-        stages</strong> run only what fits. For a PE that is <strong>14 always-on stages</strong>
+        stages</strong> run only what fits. For a PE that is <strong>15 always-on stages</strong>
         (shown below) plus <strong>two deep stages</strong> (<code>--deep</code>,
         <code>--unpack</code>) that the skill now <strong>auto-escalates when the evidence warrants</strong>
         — see <a href="#deeper">Going deeper</a> for the trigger rules. Non-PE samples (Office / PDF / LNK / archive / email) skip the
@@ -548,6 +552,23 @@
             packed payload.</p>
           <div class="cmd"><span class="pr">$</span> python3 "$PESTATS" "$SAMPLE"</div>
           <div class="out">→ <b>peinfo.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">6b</div>
+        <div class="stage-body">
+          <h3>Authenticode verification <span style="font-weight:500;color:var(--muted);font-size:.85rem">— PE/.NET route</span></h3>
+          <div class="tool">signify</div>
+          <p>Where PE structure only notes a signature <em>exists</em>, this <em>verifies</em> it:
+            validates the cert chain &amp; digest against the bundled Microsoft trust store, checks the
+            validity window, and flags <code>self_signed</code> / <code>hash_mismatch</code> (tampered
+            after signing) / <code>expired</code> / <code>weak_digest</code> — plus a stolen/abused-cert
+            correlation against <code>rules/abused_certs.json</code>. A bidirectional signal: a valid
+            vendor signature leans benign, a broken one is itself a finding. (Revocation isn't checked
+            offline — recorded as a gap.)</p>
+          <div class="cmd"><span class="pr">$</span> "$PY" "$AUTHENTICODE" "$SAMPLE" authenticode.json</div>
+          <div class="out">→ <b>authenticode.json</b></div>
         </div>
       </div>
 
@@ -654,6 +675,27 @@
       <div class="stage">
         <div class="stage-idx">14</div>
         <div class="stage-body">
+          <h3>VirusTotal behaviour ingestion <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal (when VT-known)</span></h3>
+          <div class="tool">python · VT API v3 behaviour_summary</div>
+          <p>The pipeline's <em>only</em> source of <strong>confirmed-observed</strong> behaviour —
+            every other stage recovers <em>embedded</em> indicators (intent). Pulls VT's
+            <strong>existing</strong> sandbox detonation for the hash (<strong>nothing is uploaded</strong>):
+            network the sample contacted (DNS / IP / HTTP / TLS), files dropped <em>with child hashes</em>,
+            registry, mutexes, processes, commands, services, plus MITRE techniques and Suricata IDS
+            hits. So a C2 the config stage ripped as <em>intent</em> is promoted to
+            <strong>“confirmed live (per VT, &lt;date&gt;)”</strong>, and resolved IPs / dropped
+            hashes feed back into the reputation + pivot stages. Honest by design:
+            <code>static_only</code> (VT has only a static report) / <code>not_detonated</code> /
+            <code>unavailable</code> is recorded as a <strong>gap</strong> → escalate to a sandbox,
+            never read as “did nothing”. Paced for the VT public-tier rate limit.</p>
+          <div class="cmd"><span class="pr">$</span> python3 tools/vt_behavior.py "$REPORT_DIR/hashes.json" "$REPORT_DIR/behavior.json"</div>
+          <div class="out">→ <b>behavior.json</b></div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-idx">15</div>
+        <div class="stage-body">
           <h3>Tool &amp; rule-set provenance <span style="font-weight:500;color:var(--muted);font-size:.85rem">— universal</span></h3>
           <div class="tool">python · versions + rule-set commits</div>
           <p>Stamps the exact stack that produced the report — each tool's version (capa, floss, die,
@@ -703,6 +745,118 @@
         </div>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="toolchain">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="kicker">Toolchain</p>
+      <h2>Every tool Sharingan orchestrates</h2>
+      <p class="prose">Sharingan is an orchestrator — it routes a sample through best-of-breed
+        third-party tools and its own glue, then reasons across the artifacts. Everything below is
+        free / open-source. The Python deps install into the project venv via
+        <code>tools/setup-env.sh</code>; the system tools (<code>capa</code>, <code>floss</code>,
+        <code>yara</code>, <code>die</code>, <code>7z</code>, <code>pdfid</code>) are installed
+        once with your package manager; Ghidra and de4dot have their own per-analyst installers.</p>
+    </div>
+
+    <h3>Core binary triage &amp; identification</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Tool</th><th>Role in Sharingan</th><th>Source / download</th></tr></thead>
+        <tbody>
+          <tr><td><code>file</code> / libmagic</td><td>Magic-byte typing behind <code>identify.py</code>'s routing front door.</td><td><a href="https://github.com/file/file">github.com/file/file</a></td></tr>
+          <tr><td><code>strings</code> (binutils)</td><td>Universal ASCII/UTF-16 string dump for every sample type.</td><td><a href="https://www.gnu.org/software/binutils/">gnu.org/software/binutils</a></td></tr>
+          <tr><td><code>coreutils</code> (md5/sha1/sha256sum)</td><td>Sample hashing for the report + all reputation lookups.</td><td><a href="https://www.gnu.org/software/coreutils/">gnu.org/software/coreutils</a></td></tr>
+          <tr><td><code>curl</code></td><td>HTTP client for the VirusTotal &amp; MalwareBazaar hash lookups.</td><td><a href="https://curl.se/">curl.se</a></td></tr>
+          <tr><td>Detect It Easy (<code>diec</code>)</td><td>Packer / compiler / protector / .NET-protector detection.</td><td><a href="https://github.com/horsicq/Detect-It-Easy">github.com/horsicq/Detect-It-Easy</a></td></tr>
+          <tr><td>capa</td><td>Maps binary capabilities to MITRE ATT&amp;CK / MBC (PE/.NET/ELF).</td><td><a href="https://github.com/mandiant/capa">github.com/mandiant/capa</a></td></tr>
+          <tr><td>FLARE FLOSS</td><td>Recovers stack / obfuscated / encoded strings static <code>strings</code> misses.</td><td><a href="https://github.com/mandiant/flare-floss">github.com/mandiant/flare-floss</a></td></tr>
+          <tr><td>YARA</td><td>Signature matching against family rule packs (every sample type).</td><td><a href="https://github.com/VirusTotal/yara">github.com/VirusTotal/yara</a></td></tr>
+          <tr><td><code>pefile</code></td><td>PE structure parsing (imports / sections / entropy) for <code>pestats</code> + <code>identify</code>.</td><td><a href="https://github.com/erocarrera/pefile">github.com/erocarrera/pefile</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Format-specific handlers (non-PE)</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Tool</th><th>Role in Sharingan</th><th>Source / download</th></tr></thead>
+        <tbody>
+          <tr><td>oletools (<code>olevba</code> / <code>oleid</code>)</td><td>Office macro extraction + maldoc IOC/indicator triage.</td><td><a href="https://github.com/decalage2/oletools">github.com/decalage2/oletools</a></td></tr>
+          <tr><td><code>olefile</code></td><td>OLE compound-file parsing (Office / MSI / MSG detection).</td><td><a href="https://github.com/decalage2/olefile">github.com/decalage2/olefile</a></td></tr>
+          <tr><td>pdfid + pdf-parser</td><td>PDF structure &amp; active-content (JS / launch / embedded) triage.</td><td><a href="https://github.com/DidierStevens/DidierStevensSuite">github.com/DidierStevens/DidierStevensSuite</a></td></tr>
+          <tr><td>LnkParse3</td><td>Parses <code>.lnk</code> target / arguments / working dir / icon.</td><td><a href="https://github.com/Matmaus/LnkParse3">github.com/Matmaus/LnkParse3</a></td></tr>
+          <tr><td>msg-extractor (<code>extract_msg</code>)</td><td>Outlook <code>.msg</code> email headers / body / attachments.</td><td><a href="https://github.com/TeamMsgExtractor/msg-extractor">github.com/TeamMsgExtractor/msg-extractor</a></td></tr>
+          <tr><td>7-Zip / p7zip (<code>7z</code>)</td><td>Archive + disk-image (ISO/UDF/VHD/VHDX/IMG) extraction &amp; recursion.</td><td><a href="https://www.7-zip.org/">7-zip.org</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Deep RE, unpacking &amp; deobfuscation</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Tool</th><th>Role in Sharingan</th><th>Source / download</th></tr></thead>
+        <tbody>
+          <tr><td>Ghidra (headless)</td><td>Decompilation of decrypt / loader / C2 routines (<code>--deep</code>).</td><td><a href="https://github.com/NationalSecurityAgency/ghidra">github.com/NationalSecurityAgency/ghidra</a></td></tr>
+          <tr><td>Speakeasy</td><td>Emulates the loader stub to carve a packed PE payload (<code>--unpack</code>, N4).</td><td><a href="https://github.com/mandiant/speakeasy">github.com/mandiant/speakeasy</a></td></tr>
+          <tr><td>Unicorn Engine</td><td>CPU-emulation backend Speakeasy runs on (pinned <code>1.0.2</code>).</td><td><a href="https://www.unicorn-engine.org/">unicorn-engine.org</a></td></tr>
+          <tr><td>de4dot</td><td>Strips managed .NET protectors (.NET Reactor / ConfuserEx / …) for N7.</td><td><a href="https://github.com/de4dot/de4dot">github.com/de4dot/de4dot</a></td></tr>
+          <tr><td>.NET SDK (<code>dotnet</code>)</td><td>Builds + runs the de4dot .NET-Core binary (N7 install).</td><td><a href="https://dotnet.microsoft.com/download">dotnet.microsoft.com/download</a></td></tr>
+          <tr><td>Mono <span style="color:var(--muted)">(optional)</span></td><td>Fallback runtime for a native <code>de4dot.exe</code> instead of the .NET-Core build.</td><td><a href="https://www.mono-project.com/">mono-project.com</a></td></tr>
+          <tr><td>signify + mscerts</td><td>Authenticode chain/digest verification against the MS trust store (N6).</td><td><a href="https://github.com/ralphje/signify">github.com/ralphje/signify</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Config / C2 extraction (N2)</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Tool</th><th>Role in Sharingan</th><th>Source / download</th></tr></thead>
+        <tbody>
+          <tr><td>ConfigExtractor (<code>configextractor-py</code>)</td><td>Framework that runs family parsers to rip embedded config.</td><td><a href="https://github.com/CybercentreCanada/configextractor-py">github.com/CybercentreCanada/configextractor-py</a></td></tr>
+          <tr><td>CAPE parsers (<code>cape-parsers</code>)</td><td>CAPE Sandbox family config parsers used by ConfigExtractor.</td><td><a href="https://pypi.org/project/cape-parsers/">pypi.org/project/cape-parsers</a></td></tr>
+          <tr><td>RAT King Parser (<code>rat-king-parser</code>)</td><td>Config parsers for AsyncRAT / Quasar / DcRat-class RATs.</td><td><a href="https://github.com/jeFF0Falltrades/rat_king_parser">github.com/jeFF0Falltrades/rat_king_parser</a></td></tr>
+          <tr><td><code>validators</code></td><td>Dependency of the RAT-King MACO output path (≥0.22).</td><td><a href="https://github.com/python-validators/validators">github.com/python-validators/validators</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Enrichment APIs &amp; data sources <span style="font-weight:500;color:var(--muted);font-size:.85rem">— services, not downloads (API key in <code>config.env</code>)</span></h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Service</th><th>Role in Sharingan</th><th>Site</th></tr></thead>
+        <tbody>
+          <tr><td>VirusTotal</td><td>Hash reputation, sandbox-behaviour ingestion (N1), pivoting, domain rep.</td><td><a href="https://www.virustotal.com/">virustotal.com</a> · <a href="https://docs.virustotal.com/">API docs</a></td></tr>
+          <tr><td>MalwareBazaar (abuse.ch)</td><td>Hash → known sample / family / tags lookup.</td><td><a href="https://bazaar.abuse.ch/">bazaar.abuse.ch</a></td></tr>
+          <tr><td>ThreatFox (abuse.ch)</td><td>IOC → C2 / family attribution for domain &amp; IP reputation.</td><td><a href="https://threatfox.abuse.ch/">threatfox.abuse.ch</a></td></tr>
+          <tr><td>URLhaus (abuse.ch)</td><td>Malicious-URL reputation for extracted links.</td><td><a href="https://urlhaus.abuse.ch/">urlhaus.abuse.ch</a></td></tr>
+          <tr><td>AbuseIPDB</td><td>Reputation / abuse confidence for extracted public IPs.</td><td><a href="https://www.abuseipdb.com/">abuseipdb.com</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Rule sets</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Rule set</th><th>Role in Sharingan</th><th>Source / download</th></tr></thead>
+        <tbody>
+          <tr><td>capa-rules</td><td>The capability rules capa matches against (versioned in provenance).</td><td><a href="https://github.com/mandiant/capa-rules">github.com/mandiant/capa-rules</a></td></tr>
+          <tr><td>capa FLIRT signatures</td><td>Library-function identification for capa (bundled with capa).</td><td><a href="https://github.com/mandiant/capa">github.com/mandiant/capa</a></td></tr>
+          <tr><td>YARA-Rules / rules</td><td>Community YARA family / packer signatures.</td><td><a href="https://github.com/Yara-Rules/rules">github.com/Yara-Rules/rules</a></td></tr>
+          <tr><td>signature-base (Neo23x0)</td><td>Florian Roth's curated YARA set (APT / crime / hacktools).</td><td><a href="https://github.com/Neo23x0/signature-base">github.com/Neo23x0/signature-base</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:1.4em;color:var(--muted);font-size:.92rem">In-house glue (no download — ships in
+      <code>tools/</code>): <code>identify.py</code> (routing), <code>nonpe.py</code> (format dispatch),
+      <code>scriptscan.py</code> (N8 script deob), <code>htmlsmuggle.py</code> (N9 HTML/SVG smuggling),
+      <code>dotnet_deob.py</code> (N7 driver), <code>config_extract.py</code>, <code>unpack_emulate.py</code>,
+      <code>authenticode.py</code>, <code>pestats</code>, <code>collect_strings.py</code>,
+      <code>domain_rep.py</code>, <code>vt_pivot.py</code>, <code>vt_behavior.py</code>,
+      <code>provenance.py</code>. All stdlib-only Python, versioned with the project.</p>
   </div>
 </section>
 
@@ -761,6 +915,8 @@
 ├─ yara.txt             <span class="cm"># signature matches</span>
 ├─ abuseipdb.json       <span class="cm"># IP reputation</span>
 ├─ domain_rep.json      <span class="cm"># domain/C2 reputation (ThreatFox, URLhaus, VT-domain)</span>
+├─ vt_pivot.json        <span class="cm"># family/campaign expansion (siblings, imphash)</span>
+├─ behavior.json        <span class="cm"># VT sandbox runtime behaviour — confirmed-observed (when VT-known)</span>
 ├─ ghidra.json          <span class="cm"># decompiled funcs (only with --deep)</span>
 ├─ analysis_report.md   <span class="cm"># the written analysis (source the HTML is built from)</span>
 ├─ analysis_report.html <span class="ok"># ← the deliverable, auto-generated every run</span>
@@ -905,7 +1061,7 @@
 
 <footer>
   <div class="wrap">
-    <span>Sharingan — static analysis pipeline for Windows PE samples.</span>
+    <span>Sharingan — file-type-agnostic static analysis pipeline (PE/.NET, ELF, docs, scripts, archives, disk images, email).</span>
     <span style="font-family:var(--mono); color:var(--faint);">collect · correlate · report</span>
   </div>
 </footer>

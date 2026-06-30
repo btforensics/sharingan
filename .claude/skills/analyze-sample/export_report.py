@@ -21,11 +21,80 @@ Override browser detection with the BROWSER_PDF env var (full path to the exe).
 """
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+
+def report_subject(md: Path) -> str:
+    """A human title for the report: the sample name from the report dir
+    (reports/<sample>_<YYYYmmdd_HHMMSS>/), stripped of the timestamp."""
+    name = re.sub(r"_\d{8}_\d{6}$", "", md.parent.name)
+    return name or md.stem
+
+
+# Branded masthead injected at the top of the body (replaces pandoc's redundant
+# filename-as-title block, which CSS hides). {SUBJECT} = the sample name.
+MASTHEAD_TMPL = """<div class="sg-masthead">
+  <div class="sg-eye" aria-hidden="true"></div>
+  <div class="sg-brand">
+    <div class="sg-word">SHARINGAN</div>
+    <div class="sg-tag">See through the disguise · AI-assisted malware triage</div>
+  </div>
+  <div class="sg-meta">{SUBJECT}</div>
+</div>
+"""
+
+
+# Inserted at the top of the Hypothesis List section so every report explains
+# its own confidence badges (the colours map to the CLAUDE.md confidence rubric).
+CONF_LEGEND_HTML = """<div class="conf-legend">
+  <div class="conf-legend-title">Confidence key — the badge grades the behavioural claim, not whether an IOC is worth hunting</div>
+  <ul>
+    <li><span class="conf conf-confirmed">Confirmed / High</span> Strongly corroborated — ≥2 independent sources agree, read directly from code, or observed at runtime. Stated as fact.</li>
+    <li><span class="conf conf-intent">High&nbsp;intent / Medium</span> <strong>High intent:</strong> the artifact is extracted from the sample itself (hardcoded C2 URLs, drop paths, Run keys, mutexes) — <strong>high-fidelity and ready to hunt now</strong>. “Intent” only means the sample is <em>configured</em> to do this; that it actually executed wasn't observed (a sandbox confirms that). <strong>Medium:</strong> a claim resting on a single / weak source — corroborate the claim itself.</li>
+    <li><span class="conf conf-investigate">Investigate / Low</span> Suggestive but unconfirmed — carries a named next step to prove or disprove it.</li>
+  </ul>
+  <div class="conf-legend-note"><strong>For hunters:</strong> every indicator in the IOC table is extracted from this sample and is safe to sweep your telemetry with immediately. The badges qualify the <em>narrative</em> (“it beacons to X”, “it drops Y” — whether we <em>watched</em> it happen), not whether the indicator itself is real.</div>
+</div>
+"""
+
+
+def style_hypotheses(html_path: Path):
+    """Post-process: turn each '### Hn — claim (VERDICT)' heading into a
+    color-coded card with a confidence badge so verdicts are scannable, and
+    insert a confidence-key legend at the top of the Hypothesis List section."""
+    def level(tag: str) -> str:
+        t = tag.lower()
+        if "confirm" in t:            return "confirmed"
+        if "investigate" in t:        return "investigate"
+        if "intent" in t:             return "intent"
+        if "critical" in t:           return "confirmed"
+        if "high" in t:               return "high"
+        if "medium" in t:             return "medium"
+        if "low" in t:                return "low"
+        return "high"
+
+    def repl(m):
+        attrs = m.group(1)
+        claim = re.sub(r"\s+", " ", m.group(2)).strip()
+        tag = re.sub(r"\s+", " ", m.group(3)).strip()
+        lvl = level(tag)
+        return (f'<h3{attrs} class="hyp hyp-{lvl}">{claim} '
+                f'<span class="conf conf-{lvl}">{tag}</span></h3>')
+
+    html = html_path.read_text(encoding="utf-8")
+    # headings look like: <h3 id="...">H1 — claim text (CONFIRMED)</h3>
+    # pandoc wraps the heading text across newlines, so DOTALL is required.
+    html = re.sub(r'<h3([^>]*)>\s*(H\d+\b.*?)\s*\(([^()<]+)\)\s*</h3>',
+                  repl, html, flags=re.DOTALL)
+    # drop the confidence-key legend in right after the Hypothesis List heading
+    html, n = re.subn(r'(<h2[^>]*>\s*Hypothes[^<]*</h2>)',
+                      r'\1\n' + CONF_LEGEND_HTML, html, count=1, flags=re.I)
+    html_path.write_text(html, encoding="utf-8")
 
 CSS = r"""
 @page { size: A4; margin: 1.6cm 1.4cm;
@@ -49,6 +118,40 @@ td code { background:transparent; padding:0; }
 blockquote { border-left:3px solid #c9d6e3; margin:0.6em 0; padding:2px 10px; color:#555;
              background:#fafcfe; }
 strong { color:#0b3d6b; }
+/* hide pandoc's redundant filename-as-title block */
+#title-block-header { display:none; }
+/* Sharingan masthead (light/print) */
+.sg-masthead { display:flex; align-items:center; gap:14px; padding:12px 16px; margin:0 0 14px;
+  background:linear-gradient(120deg,#fbecec,#f3f7fb 60%); border:1px solid #c9d6e3;
+  border-left:4px solid #b21f24; border-radius:8px; }
+.sg-eye { width:30px; height:30px; border-radius:50%; flex:0 0 auto;
+  background:radial-gradient(circle at 50% 50%,#fff 0 20%,#b21f24 21% 42%,#7a1418 43% 62%,#b21f24 63% 80%,#3a0a0c 81% 100%); }
+.sg-word { font-weight:800; letter-spacing:.16em; font-size:15pt; color:#b21f24; }
+.sg-tag { font-size:8pt; color:#666; }
+.sg-meta { margin-left:auto; font-family:"Consolas",monospace; font-size:8.5pt; color:#0b3d6b;
+  background:#fff; border:1px solid #c9d6e3; border-radius:999px; padding:3px 10px; }
+/* hypothesis cards + confidence badges */
+h3.hyp { padding:7px 11px; border-radius:6px; background:#f3f7fb; border:1px solid #c9d6e3;
+  border-left:4px solid #11507f; margin-top:1.1em; }
+h3.hyp-confirmed, h3.hyp-high { border-left-color:#1a7f37; }
+h3.hyp-medium, h3.hyp-intent { border-left-color:#bf8700; }
+h3.hyp-investigate, h3.hyp-low { border-left-color:#888; }
+.conf { display:inline-block; font-size:7pt; font-weight:700; letter-spacing:.05em;
+  text-transform:uppercase; padding:2px 7px; border-radius:999px; margin-left:6px; }
+.conf-confirmed, .conf-high { background:#dafbe1; color:#1a7f37; border:1px solid #1a7f37; }
+.conf-medium, .conf-intent { background:#fff8c5; color:#9a6700; border:1px solid #bf8700; }
+.conf-investigate, .conf-low { background:#eef1f4; color:#555; border:1px solid #888; }
+/* confidence-key legend at the top of the Hypothesis List */
+.conf-legend { background:#f3f7fb; border:1px solid #c9d6e3; border-radius:6px;
+  padding:8px 12px; margin:0.3em 0 1em; }
+.conf-legend-title { font-weight:700; color:#0b3d6b; text-transform:uppercase;
+  letter-spacing:.06em; font-size:7pt; margin-bottom:5px; }
+.conf-legend ul { list-style:none; margin:0; padding:0; }
+.conf-legend li { color:#444; line-height:1.45; font-size:8.4pt; margin-bottom:3px; }
+.conf-legend li strong { color:#1a1a1a; }
+.conf-legend .conf { margin-left:0; margin-right:6px; }
+.conf-legend-note { margin-top:7px; padding-top:6px; border-top:1px solid #c9d6e3;
+  font-size:8pt; color:#0b3d6b; line-height:1.45; }
 """
 
 # Dark theme — used for the on-screen .html export only (the PDF keeps CSS above,
@@ -94,6 +197,45 @@ blockquote { border-left:4px solid var(--accent); background:var(--panel); margi
              padding:10px 18px; color:var(--muted); border-radius:0 8px 8px 0; }
 blockquote strong { color:var(--accent2); }
 ::selection { background:var(--accent-dim); color:#fff; }
+/* hide pandoc's redundant filename-as-title block */
+#title-block-header { display:none; }
+/* Sharingan masthead (dark/screen) — red eye motif, the brand identity */
+.sg-masthead { display:flex; align-items:center; gap:18px; padding:20px 24px; margin:0 0 22px;
+  background:linear-gradient(120deg,#1f0f12,#161b22 62%); border:1px solid var(--line);
+  border-left:4px solid #e5484d; border-radius:12px;
+  box-shadow:0 14px 36px -22px rgba(229,72,77,.5); }
+.sg-eye { width:40px; height:40px; border-radius:50%; flex:0 0 auto;
+  background:radial-gradient(circle at 50% 50%,#0d1117 0 21%,#ff5a5f 22% 42%,#7a1418 43% 62%,#ff5a5f 63% 80%,#2a0a0c 81% 100%);
+  box-shadow:0 0 20px -2px rgba(229,72,77,.65); }
+.sg-word { font-weight:800; letter-spacing:.2em; font-size:1.6rem; color:#ff6b6b; }
+.sg-tag { font-size:.83rem; color:var(--muted); margin-top:2px; }
+.sg-meta { margin-left:auto; font-family:"JetBrains Mono",monospace; font-size:.85rem;
+  color:var(--accent2); background:var(--panel2); border:1px solid var(--line);
+  border-radius:999px; padding:5px 14px; }
+/* hypothesis cards + confidence badges — scannable verdicts */
+h3.hyp { padding:9px 13px; border-radius:8px; background:var(--panel); border:1px solid var(--line);
+  border-left:4px solid var(--accent); margin-top:1.6em; }
+h3.hyp-confirmed, h3.hyp-high { border-left-color:#3fb950; }
+h3.hyp-medium, h3.hyp-intent { border-left-color:#d29922; }
+h3.hyp-investigate, h3.hyp-low { border-left-color:#8b949e; }
+.conf { display:inline-block; font-size:.6em; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; padding:3px 9px; border-radius:999px; margin-left:8px;
+  vertical-align:middle; }
+.conf-confirmed, .conf-high { background:rgba(63,185,80,.16); color:#56d364; border:1px solid #2ea043; }
+.conf-medium, .conf-intent { background:rgba(210,153,34,.16); color:#e3b341; border:1px solid #9e6a03; }
+.conf-investigate, .conf-low { background:rgba(139,148,158,.16); color:#b1bac4; border:1px solid #6e7681; }
+/* confidence-key legend at the top of the Hypothesis List */
+.conf-legend { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+  padding:13px 16px; margin:.4em 0 1.4em; }
+.conf-legend-title { font-weight:700; color:var(--accent2); text-transform:uppercase;
+  letter-spacing:.08em; font-size:.72rem; margin-bottom:9px; }
+.conf-legend ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+.conf-legend li { color:var(--muted); line-height:1.5; font-size:.92rem; }
+.conf-legend li strong { color:var(--ink); }
+.conf-legend .conf { margin-left:0; margin-right:9px; }
+.conf-legend-note { margin-top:11px; padding-top:9px; border-top:1px solid var(--line);
+  font-size:.88rem; color:var(--accent2); line-height:1.5; }
+.conf-legend-note strong { color:#56d364; }
 """
 
 # Browser candidates by command name (resolved on PATH first).
@@ -140,13 +282,25 @@ def find_browser():
 
 
 def md_to_html(md: Path, html: Path, pandoc: str, css_path: Path):
-    subprocess.run(
-        [pandoc, str(md), "-f", "gfm", "-t", "html5", "-s",
-         "--metadata", f"title={md.stem}",
-         "-c", str(css_path), "--embed-resources",
-         "-o", str(html)],
-        check=True,
-    )
+    subject = report_subject(md)
+    with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False,
+                                     encoding="utf-8") as bf:
+        bf.write(MASTHEAD_TMPL.format(SUBJECT=subject))
+        banner = bf.name
+    try:
+        subprocess.run(
+            [pandoc, str(md), "-f", "gfm", "-t", "html5", "-s",
+             # browser-tab title: brand + sample (the on-page title block is
+             # CSS-hidden; the masthead below replaces it)
+             "--metadata", f"title=Sharingan · {subject} · Triage",
+             "--include-before-body", banner,
+             "-c", str(css_path), "--embed-resources",
+             "-o", str(html)],
+            check=True,
+        )
+    finally:
+        os.unlink(banner)
+    style_hypotheses(html)
 
 
 def md_to_docx(md: Path, docx: Path, pandoc: str):

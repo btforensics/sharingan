@@ -11,7 +11,8 @@ failure kill the others (a missing tool is captured as a note, not a crash).
   lnk                       → lnk.json (target, args, working dir)
   archive                   → archive.json (listing + per-entry identify)
   email                     → email.json (headers, urls, attachments)
-  script / unknown          → handled via the universal strings stage
+  script                    → scriptscan.json (recursive deobfuscation + IOCs)
+  unknown                   → handled via the universal strings stage
 
 Run under the project venv (tools/venv) so LnkParse3 / extract_msg import;
 olevba / oleid / pdfid are invoked as subprocesses by path (env) or PATH.
@@ -25,9 +26,24 @@ URL_RE = re.compile(r"https?://[^\s\"'<>)\]}]+", re.I)
 IP_RE = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
 
 
+_VENV_BIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin")
+
+
 def tool(envvar, default):
+    """Resolve an external tool, in order of preference:
+      1) explicit path in <envvar> (triage.sh injects these from config.env);
+      2) the project venv (self-located relative to this file) — so a hand-run
+         `nonpe.py <doc> office_ole <rd>` finds olevba/oleid/pdfid even when the
+         env vars aren't set (the footgun that made macro analysis silently skip);
+      3) bare name on PATH.
+    """
     p = os.environ.get(envvar, "")
-    return p if p and os.path.exists(p) else default
+    if p and os.path.exists(p):
+        return p
+    cand = os.path.join(_VENV_BIN, default)
+    if os.path.exists(cand):
+        return cand
+    return default
 
 
 def run(cmd, timeout=120):
@@ -111,6 +127,13 @@ def handle_lnk(sample, rd):
 # the handler reports password_required and the skill asks the user.
 DEFAULT_ARCHIVE_PWDS = ["virus", "infected", "N0virus", "novirus"]
 
+# Gating rubric — bound a carve/extract stage so a hostile container (zip bomb,
+# deeply-nested or ISO/IMG with thousands of files) can't blow up disk or time:
+MAX_ARCHIVE_ENTRIES = 500          # children recorded/identified
+MAX_ARCHIVE_TOTAL   = 2 << 30      # 2 GB total extracted-size guard
+# Depth is bounded by design: nested archives among the children are IDENTIFIED
+# but not auto-extracted (no recursive descent), so depth never exceeds 1.
+
 
 def _looks_encrypted(text):
     t = (text or "").lower()
@@ -128,7 +151,9 @@ def _7z_extract(sample, extract_dir, pwd):
 def handle_archive(sample, rd):
     rc, listing, lerr = run(["7z", "l", sample])
     result = {"listing_raw": listing, "encrypted": False, "password_used": None,
-              "password_required": False, "passwords_tried": [], "extracted": []}
+              "password_required": False, "passwords_tried": [], "extracted": [],
+              "entries_truncated": False, "total_extracted_bytes": 0,
+              "nested_archives": [], "notes": []}
     extract_dir = os.path.join(rd, "extracted")
     os.makedirs(extract_dir, exist_ok=True)
 
@@ -164,25 +189,83 @@ def handle_archive(sample, rd):
 
     result["extract_status"] = "ok"
     identify = tool("IDENTIFY", os.path.join(os.path.dirname(__file__), "identify.py"))
+    count = 0
     for root, _, files in os.walk(extract_dir):
         for fn in files:
             fp = os.path.join(root, fn)
+            try:
+                result["total_extracted_bytes"] += os.path.getsize(fp)
+            except OSError:
+                pass
+            if count >= MAX_ARCHIVE_ENTRIES:
+                result["entries_truncated"] = True
+                continue
             rc, out, err = run([sys.executable, identify, fp])
             try:
                 info = json.loads(out)
             except Exception:
                 info = {"filename": fn, "category": "unknown"}
-            result["extracted"].append({
+            entry = {
                 "path": os.path.relpath(fp, rd),
                 "category": info.get("category"),
                 "subtype": info.get("subtype"),
                 "size_bytes": info.get("size_bytes"),
                 "extension_mismatch": info.get("extension_mismatch"),
-            })
+            }
+            result["extracted"].append(entry)
+            # depth cap: a nested archive is flagged, not auto-extracted
+            if info.get("category") == "archive":
+                result["nested_archives"].append(entry["path"])
+            count += 1
+
+    if result["entries_truncated"]:
+        result["notes"].append(
+            f"ENTRY CAP: container holds >{MAX_ARCHIVE_ENTRIES} files — only the first "
+            f"{MAX_ARCHIVE_ENTRIES} were identified (gating cap). Inspect extracted/ manually.")
+    if result["total_extracted_bytes"] > MAX_ARCHIVE_TOTAL:
+        result["notes"].append(
+            f"SIZE GUARD: extracted {result['total_extracted_bytes'] >> 20} MB "
+            f"(> {MAX_ARCHIVE_TOTAL >> 20} MB) — possible decompression bomb; verify disk use.")
+    if result["nested_archives"]:
+        result["notes"].append(
+            f"{len(result['nested_archives'])} nested archive(s) identified but NOT "
+            "auto-extracted (depth cap = 1) — re-run triage.sh on each if relevant.")
     json.dump(result, open(os.path.join(rd, "archive.json"), "w"), indent=2)
     pw = result["password_used"]
     print(f"    archive -> archive.json ({len(result['extracted'])} entries"
-          + (f", password='{pw}'" if pw else "") + ")")
+          + (f", password='{pw}'" if pw else "")
+          + (", TRUNCATED" if result["entries_truncated"] else "") + ")")
+
+
+# ── Script (PowerShell / JS / VBS / HTA / BAT / WSF / shell) ───────────────
+def handle_script(sample, rd):
+    """Recursive deobfuscation: peel base64/hex/charcode/%-escape/gzip layers and
+    re-extract IOCs from each. Delegates to the stdlib-only scriptscan.py."""
+    scriptscan = tool("SCRIPTSCAN",
+                      os.path.join(os.path.dirname(__file__), "scriptscan.py"))
+    rc, out, err = run([sys.executable, scriptscan, sample, rd], timeout=180)
+    if out.strip():
+        print("    " + out.strip().splitlines()[-1].strip())
+    if rc != 0 and not os.path.exists(os.path.join(rd, "scriptscan.json")):
+        write(rd, "scriptscan.json", json.dumps(
+            {"error": err or "scriptscan failed", "sample": os.path.basename(sample)}))
+        print("    scriptscan failed — captured as note")
+
+
+# ── HTML / SVG (smuggling) ─────────────────────────────────────────────────
+def handle_html(sample, rd):
+    """Extract HTML/SVG-smuggled payloads: fingerprint client-side reassembly
+    primitives, decode embedded data:/atob/base64 blobs, carve the payload.
+    Delegates to the stdlib-only htmlsmuggle.py."""
+    hs = tool("HTMLSMUGGLE",
+              os.path.join(os.path.dirname(__file__), "htmlsmuggle.py"))
+    rc, out, err = run([sys.executable, hs, sample, rd], timeout=180)
+    if out.strip():
+        print("    " + out.strip().splitlines()[-1].strip())
+    if rc != 0 and not os.path.exists(os.path.join(rd, "htmlsmuggle.json")):
+        write(rd, "htmlsmuggle.json", json.dumps(
+            {"error": err or "htmlsmuggle failed", "sample": os.path.basename(sample)}))
+        print("    htmlsmuggle failed — captured as note")
 
 
 # ── Email (.eml / .msg) ────────────────────────────────────────────────────
@@ -232,6 +315,7 @@ HANDLERS = {
     "office_ole": handle_office, "office_ooxml": handle_office,
     "pdf": handle_pdf, "lnk": handle_lnk,
     "archive": handle_archive, "email": handle_email,
+    "script": handle_script, "html": handle_html,
 }
 
 

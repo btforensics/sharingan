@@ -17,10 +17,20 @@ reports/
 tools/DIE-engine/
 # pestats clone (third-party, has its own git history)
 tools/pestats/
-# Rule sets — capa-rules / capa-sigs / yara-rules / signature-base clones
-rules/
+# Rule sets — capa-rules / capa-sigs / yara-rules / signature-base clones (bulk
+# upstream checkouts, bootstrapped locally — not committed). Use rules/* (not
+# rules/) so we can re-include curated, project-owned rule files below; git can't
+# un-ignore a file whose parent DIRECTORY is excluded.
+rules/*
+# ...but the analyst-maintained abused/stolen code-signing cert list (N6) IS ours
+# and must travel with the repo (team-distributed — config lives in committed files).
+!rules/abused_certs.json
 # Per-analyst Python venv (oletools/LnkParse3/Speakeasy/...) — built by setup-env.sh
 tools/venv/
+# Per-analyst de4dot build for the N7 .NET-deob stage — built by install-dotnet-deob.sh
+# (like the venv / Ghidra, reproduced locally, not committed).
+tools/de4dot/
+tools/de4dot-src/
 
 # ─────────────────────────────────────────────────────────────────────────
 #  Python / editor / local Claude Code cruft

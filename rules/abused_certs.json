@@ -1,0 +1,31 @@
+{
+  "_about": "Analyst-maintained list of code-signing certificates known to have been STOLEN or ABUSED by malware. tools/authenticode.py correlates a sample's signer against this list. This ships as a STARTER list — extend it from your own threat intel (VT, vendor reports, CISA advisories). It is intentionally small and conservative: better to under-match than to fabricate a thumbprint.",
+  "_schema": {
+    "name": "human label for the abused cert / incident",
+    "thumbprint_sha1": "leaf cert SHA-1 fingerprint (hex). A match here is a HARD hit -> flag abused_cert (High).",
+    "thumbprint_sha256": "leaf cert SHA-256 fingerprint (hex). HARD hit.",
+    "serial": "cert serial number (decimal string, as signify renders it). HARD hit.",
+    "signer_name": "substring of the signer/issuer CN. A match here is a SOFT hit -> flag abused_cert_suspected (Investigate), because names are not unique and a legit re-issued cert can share a name. Add the real thumbprint to upgrade it to a hard match.",
+    "reference": "URL / advisory ID documenting the abuse",
+    "note": "free text"
+  },
+  "_usage": "To turn a SOFT name match into a HARD match, obtain the actual stolen cert's SHA-1/SHA-256 thumbprint from the vendor report or VT and add it to the entry. Hard matches assert abuse; soft matches only flag it for analyst review.",
+  "certs": [
+    {
+      "name": "Realtek Semiconductor Corp (Stuxnet, 2010)",
+      "signer_name": "Realtek Semiconductor",
+      "thumbprint_sha1": null,
+      "serial": null,
+      "reference": "https://www.symantec.com/security_response/writeup.jsp?docid=2010-071400-3123-99",
+      "note": "Code-signing cert stolen and used to sign Stuxnet drivers. Realtek revoked it. Soft/name match only here — supply the actual thumbprint from your TI to make it a hard hit. A modern legit Realtek-signed driver will NOT carry the revoked serial, so verify before trusting a name match."
+    },
+    {
+      "name": "JMicron Technology Corp (Stuxnet, 2010)",
+      "signer_name": "JMicron Technology",
+      "thumbprint_sha1": null,
+      "serial": null,
+      "reference": "https://www.welivesecurity.com/2010/07/22/why-steal-digital-certificates/",
+      "note": "Second stolen cert used by Stuxnet after the Realtek cert was revoked. Name match is Investigate-grade only."
+    }
+  ]
+}

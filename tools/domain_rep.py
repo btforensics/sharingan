@@ -38,6 +38,36 @@ SKIP_HOSTS = {
     "example.com", "localhost",
 }
 
+# Language/runtime namespace roots. Delphi/.NET RTTI strings (e.g.
+# "System.Classes.TComponent", "Winapi.RegStr", "Vcl.Themes.TList") match the
+# domain regex and flooded a Delphi sample's bare-candidate list with ~150 junk
+# "domains", wasting reputation lookups. A real C2 never has one of these as its
+# leading label, so drop bare candidates that start with one. (strict mode only)
+NS_ROOTS = {
+    "system", "winapi", "vcl", "fmx", "rtl", "data", "datasnap", "web", "soap",
+    "rest", "xml", "bde", "ibx", "firedac", "vcltee", "designide",
+}
+# Common gTLDs that bare-string candidates may legitimately end in. Combined
+# with a "len==2 alpha ⇒ ccTLD" rule this keeps real domains (mooo.com,
+# site50.net, awvirv.gr) while dropping code-identifier "TLDs" (.tcomponent,
+# .regstr, .hash, .tlist, .create) that aren't real TLDs. (strict mode only)
+GTLD = {
+    "com", "net", "org", "info", "biz", "name", "pro", "mobi", "asia", "tel",
+    "xyz", "top", "site", "online", "club", "icu", "vip", "cc", "tk", "pw",
+    "su", "ru", "cn", "io", "co", "me", "tv", "cloud", "shop", "store", "live",
+    "app", "dev", "fun", "link", "click", "work", "world", "today", "space",
+    "website", "tech", "win", "bid", "loan", "download", "stream", "gdn", "ml",
+    "ga", "cf", "gq",
+}
+
+
+def _plausible_tld(tld):
+    """A bare-string match's TLD is plausible only if it's a 2-letter ccTLD or a
+    known gTLD. This rejects Pascal/.NET identifier 'TLDs' (e.g. 'tcomponent',
+    'regstr', 'hash') without a full IANA list, and is generous with ccTLDs so
+    we never drop an unusual-country C2."""
+    return (len(tld) == 2 and tld.isalpha()) or tld in GTLD
+
 DOMAIN_RE = re.compile(
     r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,24}\b"
 )
@@ -84,6 +114,13 @@ def _valid(host, strict):
         # require a substantial registrable label and overall length.
         registrable = labels[-2] if len(labels) >= 2 else ""
         if len(registrable) < 5 or len(host) < 8:
+            return False
+        # Drop language/runtime RTTI identifiers (Delphi/.NET) masquerading as
+        # domains: a known namespace root as the leading label, or a "TLD" that
+        # isn't a real ccTLD/gTLD (a code identifier like .TComponent/.RegStr).
+        if labels[0] in NS_ROOTS:
+            return False
+        if not _plausible_tld(tld):
             return False
     return True
 

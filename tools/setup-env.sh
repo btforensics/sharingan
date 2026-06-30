@@ -24,6 +24,12 @@ echo "[*] Installing non-PE analysis deps..."
 echo "[*] Installing emulation-unpacking dep (Speakeasy — roadmap N4)..."
 "$VENV/bin/pip" install --quiet speakeasy-emulator
 
+echo "[*] Installing Authenticode-verification dep (signify — roadmap N6)..."
+# Verifies the PE digital-signature chain + digest (tools/authenticode.py). Pulls
+# mscerts (the MS trust store) + certvalidator; no unicorn dep, so it does not
+# perturb the Speakeasy/CX unicorn pin below.
+"$VENV/bin/pip" install --quiet signify
+
 echo "[*] Installing config-extraction deps (configextractor-py + parser packs — roadmap N2)..."
 "$VENV/bin/pip" install --quiet configextractor-py cape-parsers rat-king-parser
 # rat-king's MACO output path calls validators.ValidationError + domain(consider_tld=),
@@ -39,8 +45,11 @@ echo "[*] Re-pinning unicorn==1.0.2 (Speakeasy requirement; CX tolerates it)..."
 "$VENV/bin/pip" install --quiet 'unicorn==1.0.2'
 
 echo "[*] Verifying..."
-"$VENV/bin/python" -c "from oletools import olevba; import LnkParse3, extract_msg; from speakeasy import Speakeasy; from configextractor.main import ConfigExtractor; import cape_parsers, rat_king_parser; print('    olevba', olevba.__version__, '· LnkParse3 ok · extract_msg ok · speakeasy ok · configextractor ok')"
+"$VENV/bin/python" -c "from oletools import olevba; import LnkParse3, extract_msg; from speakeasy import Speakeasy; from configextractor.main import ConfigExtractor; import cape_parsers, rat_king_parser; from signify.authenticode import AuthenticodeFile; print('    olevba', olevba.__version__, '· LnkParse3 ok · extract_msg ok · speakeasy ok · configextractor ok · signify ok')"
 
 echo "[+] Done. triage.sh will auto-detect $VENV and use it for Office/LNK/email"
 echo "    stages and for the --unpack emulation stage."
 echo "    (System tools pdfid / binwalk / 7z / capa / floss / yara / die are used as-is.)"
+echo "    (Script-deob N8 / HTML-smuggling N9 / disk-image carving are stdlib + 7z — no extra deps.)"
+echo "[i] Optional: enable the N7 managed-.NET-deob stage (de4dot) with:"
+echo "      sudo bash tools/install-dotnet-deob.sh"
