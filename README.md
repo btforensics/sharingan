@@ -10,8 +10,7 @@ the artifacts at once to produce a prioritized, evidence-cited triage report.
 It accepts PE/.NET/ELF, Office docs, PDFs, LNKs, scripts, archives, and email,
 and routes each file type to the stages that fit it.
 
-See `workflow.html` for a visual tour of the pipeline and `build-roadmap.html`
-for the capability roadmap.
+See `workflow.html` for a visual tour of the pipeline.
 
 ---
 
